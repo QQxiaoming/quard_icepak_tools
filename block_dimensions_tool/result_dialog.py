@@ -21,6 +21,24 @@ from PySide6.QtWidgets import (
 from tool_model import TableData, ToolExecutionResult, ToolParameters, build_output_path
 
 
+class SortableTableWidgetItem(QTableWidgetItem):
+    def __init__(self, value: str) -> None:
+        super().__init__(value)
+        self.sort_value: float | str
+        try:
+            self.sort_value = float(value)
+        except ValueError:
+            self.sort_value = value.casefold()
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        if isinstance(other, SortableTableWidgetItem):
+            left = self.sort_value
+            right = other.sort_value
+            if type(left) is type(right):
+                return left < right
+        return super().__lt__(other)
+
+
 class BlockDimensionsResultDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -42,6 +60,9 @@ class BlockDimensionsResultDialog(QDialog):
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setAlternatingRowColors(True)
         self.result_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.result_table.setSortingEnabled(True)
+        self.result_table.horizontalHeader().setSectionsClickable(True)
+        self.result_table.horizontalHeader().setSortIndicatorShown(True)
 
         actions = QHBoxLayout()
         actions.addStretch(1)
@@ -65,15 +86,17 @@ class BlockDimensionsResultDialog(QDialog):
             f"Block 尺寸统计完成，共 {len(table_data.rows)} 行，{len(table_data.columns)} 列。"
         )
         self.result_table.clear()
+        self.result_table.setSortingEnabled(False)
         self.result_table.setColumnCount(len(table_data.columns))
         self.result_table.setHorizontalHeaderLabels(list(table_data.columns))
         self.result_table.setRowCount(len(table_data.rows))
 
         for row_index, row in enumerate(table_data.rows):
             for column_index, value in enumerate(row):
-                self.result_table.setItem(row_index, column_index, QTableWidgetItem(value))
+                self.result_table.setItem(row_index, column_index, SortableTableWidgetItem(value))
 
         self.result_table.resizeColumnsToContents()
+        self.result_table.setSortingEnabled(True)
         self.export_csv_button.setEnabled(True)
 
     def export_current_table_to_csv(self) -> None:
