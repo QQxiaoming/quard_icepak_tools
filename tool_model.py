@@ -34,7 +34,6 @@ class ParameterSpec:
     file_filter: str = "All Files (*)"
     default_value: str = ""
     default_output_name: str = ""
-    is_example_parameter: bool = False
     example_hint: str = ""
 
 

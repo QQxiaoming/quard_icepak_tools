@@ -19,7 +19,6 @@ TOOL_SPEC = ToolSpec(
             browse_mode="none",
             required=True,
             default_value="demo_template_tool",
-            is_example_parameter=True,
             example_hint="这个字段仅用于演示如何为工具定义额外的专用输入。",
         ),
         ParameterSpec(
@@ -28,7 +27,6 @@ TOOL_SPEC = ToolSpec(
             browse_mode="none",
             required=False,
             default_value="Use this entry as a reference when adding the next real tool.",
-            is_example_parameter=True,
             example_hint="这个字段属于模板示例内容，真实工具通常不需要。",
         ),
     ),

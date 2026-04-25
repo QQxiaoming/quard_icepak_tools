@@ -146,8 +146,6 @@ class MainWindow(QMainWindow):
         value: str,
     ) -> None:
         label_text = parameter.label
-        if parameter.is_example_parameter:
-            label_text = f"{label_text} (开发示例参数)"
 
         label = QLabel(label_text, self)
         line_edit = QLineEdit(value, self)
@@ -157,10 +155,6 @@ class MainWindow(QMainWindow):
         )
         if parameter.browse_mode == "none":
             browse_button.setEnabled(False)
-        if parameter.is_example_parameter and parameter.example_hint:
-            label.setToolTip(parameter.example_hint)
-            line_edit.setToolTip(parameter.example_hint)
-            browse_button.setToolTip(parameter.example_hint)
         layout.addWidget(label, row, 0)
         layout.addWidget(line_edit, row, 1)
         layout.addWidget(browse_button, row, 2)
