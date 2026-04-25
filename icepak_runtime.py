@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -175,16 +176,39 @@ def build_command(
     project_dir: Path,
     env_script: str | None,
 ) -> list[str]:
+    system = platform.system().lower()
     icepak_args = f'-batch -run_script "{macro_path}" "{project_dir}"'
 
-    if platform.system().lower() == "windows" and icepak_bin.suffix.lower() in {".bat", ".cmd"}:
-        launch_icepak = f'call "{icepak_bin}" {icepak_args}'
-    else:
-        launch_icepak = f'"{icepak_bin}" {icepak_args}'
+    if system == "windows":
+        wrapper_lines = ["@echo off", "setlocal"]
+
+        if env_script:
+            env_path = Path(env_script).expanduser().resolve()
+            if not env_path.exists():
+                raise FileNotFoundError(f"环境脚本不存在：{env_path}")
+            wrapper_lines.append(f'call "{env_path}" || exit /b %ERRORLEVEL%')
+
+        if icepak_bin.suffix.lower() in {".bat", ".cmd"}:
+            wrapper_lines.append(f'call "{icepak_bin}" {icepak_args}')
+        else:
+            wrapper_lines.append(f'"{icepak_bin}" {icepak_args}')
+
+        wrapper_lines.append("exit /b %ERRORLEVEL%")
+
+        wrapper = tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".cmd",
+            prefix="quard_icepak_",
+            delete=False,
+            encoding="utf-8",
+            newline="\r\n",
+        )
+        with wrapper:
+            wrapper.write("\r\n".join(wrapper_lines) + "\r\n")
+
+        return ["cmd.exe", "/d", "/s", "/c", wrapper.name]
 
     if not env_script:
-        if platform.system().lower() == "windows" and icepak_bin.suffix.lower() in {".bat", ".cmd"}:
-            return ["cmd.exe", "/d", "/s", "/c", launch_icepak]
         return [str(icepak_bin), "-batch", "-run_script", str(macro_path), str(project_dir)]
 
     env_path = Path(env_script).expanduser().resolve()
@@ -198,9 +222,5 @@ def build_command(
             f'exec "{icepak_bin}" {icepak_args}'
         )
         return ["bash", "-lc", command]
-
-    if suffix in {".bat", ".cmd"}:
-        command = f'call "{env_path}" && {launch_icepak}'
-        return ["cmd.exe", "/d", "/s", "/c", command]
 
     raise ValueError("环境脚本必须以 .sh、.bat 或 .cmd 结尾")
