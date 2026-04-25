@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Validate semantic version tag
         run: |
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "Release workflow must run on a tag ref (Vx.x.x). Current ref type: ${GITHUB_REF_TYPE}"
+            exit 1
+          fi
+
           tag="${GITHUB_REF_NAME}"
           if [[ ! "$tag" =~ ^V[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag '$tag' is not a valid semantic version in Vx.x.x format"
@@ -27,15 +32,67 @@ jobs:
         with:
           generate_release_notes: true
 
+      - name: Wait for tag build workflow to complete
+        id: wait_for_tag_build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          max_attempts=120
+          attempt=1
+
+          while (( attempt <= max_attempts )); do
+            echo "Checking build workflow run for tag ${TAG} (attempt ${attempt}/${max_attempts})"
+
+            runs_json=$(gh api --method GET "/repos/${REPO}/actions/runs" -f event=push -f per_page=100)
+
+            build_run=$(echo "${runs_json}" | jq -c --arg tag "${TAG}" '
+              [ .workflow_runs[]
+                | select(
+                    .path == ".github/workflows/build-windows-exe.yml" and
+                    .head_branch == $tag
+                  )
+              ]
+              | sort_by(.run_number)
+              | last
+            ')
+
+            if [[ "${build_run}" == "null" ]]; then
+              echo "No tag build workflow run found yet for ${TAG}"
+            else
+              status=$(echo "${build_run}" | jq -r '.status')
+              conclusion=$(echo "${build_run}" | jq -r '.conclusion')
+              run_id=$(echo "${build_run}" | jq -r '.id')
+
+              if [[ "${status}" != "completed" ]]; then
+                echo "Tag build workflow ${run_id} is still ${status}"
+              elif [[ "${conclusion}" != "success" ]]; then
+                echo "Tag build workflow ${run_id} finished with conclusion: ${conclusion}"
+                exit 1
+              else
+                echo "Found successful tag build workflow run: ${run_id}"
+                echo "build_run_id=${run_id}" >> "$GITHUB_OUTPUT"
+                break
+              fi
+            fi
+
+            attempt=$((attempt + 1))
+            sleep 30
+          done
+
+          if (( attempt > max_attempts )); then
+            echo "Timeout waiting for build-windows-exe.yml for tag ${TAG}"
+            exit 1
+          fi
+
       - name: Download windows artifact
         uses: dawidd6/action-download-artifact@v20
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: build-windows-exe.yml
-          commit: ${{ github.sha }}
-          workflow_conclusion: success
+          run_id: ${{ steps.wait_for_tag_build.outputs.build_run_id }}
           name: quard_icepak_tools_windows
-          path: dist/quard_icepak_tools.exe
+          path: dist
           if_no_artifact_found: fail
 
       - name: Upload release assets
