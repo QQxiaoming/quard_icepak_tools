@@ -169,3 +169,31 @@ def run_my_tool(parameters: dict[str, str], log=None) -> ToolExecutionResult:
 - 尽量把工具逻辑、结果对话框和 Tcl 脚本都放在同一个工具目录中，保持工具自包含。
 - 主界面应尽量保持通用，不在主界面中写工具专用分支。
 - 如果工具需要展示结果弹窗，优先在工具目录内实现自己的成功处理逻辑。
+
+## GitHub Actions 打包 Windows EXE
+
+仓库已包含用于 Windows 分发的 GitHub Actions 工作流：
+
+- 工作流文件：`.github/workflows/build-windows-exe.yml`
+- PyInstaller 配置：`quard_icepak_tools.spec`
+
+触发方式：
+
+```text
+1. 在 GitHub Actions 页面手动运行 Build Windows EXE
+2. 或推送形如 v1.0.0 的 tag 自动触发
+```
+
+工作流会在 `windows-latest` 环境中：
+
+1. 安装 Python 3.11
+2. 安装 `PyInstaller` 和 `PySide6`
+3. 构建 `dist/quard_icepak_tools.exe`
+4. 上传构建产物 `quard_icepak_tools-windows`
+
+这个 spec 会额外收集：
+
+- 所有 `*_tool` 动态导入模块
+- 每个工具目录内的 `.tcl` 脚本文件
+
+这样可以避免因为 PyInstaller 静态分析不到动态发现逻辑而漏打包。
