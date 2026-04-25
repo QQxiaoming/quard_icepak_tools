@@ -46,12 +46,14 @@ jobs:
           Set-Content -Path "build_version.py" -Encoding UTF8 -Value ("BUILD_VERSION = `"{0}`"" -f $version)
 
       - name: Build EXE
-        run: pyinstaller quard_icepak_tools.spec --noconfirm --clean
+        run: |
+          pyinstaller quard_icepak_tools.spec --noconfirm --clean
+          cp "dist\${{ steps.version.outputs.exe_name }}.exe" "dist\quard_icepak_tools.exe" 
 
       - name: Smoke-test EXE startup
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "dist\${{ steps.version.outputs.exe_name }}.exe" -PassThru
+          $proc = Start-Process -FilePath "dist\quard_icepak_tools.exe" -PassThru
           Start-Sleep -Seconds 10
           if ($proc.HasExited) {
             Write-Error "EXE crashed on startup (exit code: $($proc.ExitCode))"
