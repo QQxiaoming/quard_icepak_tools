@@ -177,7 +177,14 @@ def build_command(
     env_script: str | None,
 ) -> list[str]:
     system = platform.system().lower()
-    icepak_args = f'-batch -run_script "{macro_path}" "{project_dir}"'
+
+    def _icepak_path(path: Path) -> str:
+        resolved = path.resolve()
+        if system == "windows":
+            return resolved.as_posix()
+        return str(resolved)
+
+    icepak_args = f'-batch -run_script "{_icepak_path(macro_path)}" "{_icepak_path(project_dir)}"'
 
     if system == "windows":
         wrapper_lines = ["@echo off", "setlocal"]
