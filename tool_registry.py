@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import sys
 from pathlib import Path
 from tool_model import ParameterSpec, ToolSpec, build_output_path
 
 
 def discover_tools() -> list[ToolSpec]:
-    workspace_root = Path(__file__).resolve().parent
+    if getattr(sys, "frozen", False):
+        workspace_root = Path(sys._MEIPASS)
+    else:
+        workspace_root = Path(__file__).resolve().parent
     tools: list[ToolSpec] = []
 
     for child in sorted(workspace_root.iterdir()):
         if not child.is_dir() or not child.name.endswith("_tool"):
             continue
-        if not (child / "manifest.py").exists() and not (child / "manifest.pyc").exists():
+        has_manifest = (
+            (child / "manifest.py").exists()
+            or (child / "manifest.pyc").exists()
+            or importlib.util.find_spec(f"{child.name}.manifest") is not None
+        )
+        if not has_manifest:
             continue
 
         module = importlib.import_module(f"{child.name}.manifest")
