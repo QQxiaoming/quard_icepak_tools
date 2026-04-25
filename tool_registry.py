@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import sys
 from pathlib import Path
 from tool_model import ParameterSpec, ToolSpec, build_output_path
@@ -10,7 +9,8 @@ from tool_model import ParameterSpec, ToolSpec, build_output_path
 def discover_tools() -> list[ToolSpec]:
     # When packaged with PyInstaller, sys.frozen is True and sys._MEIPASS holds
     # the temporary directory where bundled files are extracted at runtime.
-    if getattr(sys, "frozen", False):
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
         workspace_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     else:
         workspace_root = Path(__file__).resolve().parent
@@ -19,15 +19,18 @@ def discover_tools() -> list[ToolSpec]:
     for child in sorted(workspace_root.iterdir()):
         if not child.is_dir() or not child.name.endswith("_tool"):
             continue
-        has_manifest = (
-            (child / "manifest.py").exists()
-            or (child / "manifest.pyc").exists()
-            or importlib.util.find_spec(f"{child.name}.manifest") is not None
-        )
-        if not has_manifest:
+
+        if not is_frozen:
+            # In normal runs, require manifest.py or manifest.pyc on disk to preserve
+            # local-discovery-only behavior and avoid importing unrelated packages.
+            if not (child / "manifest.py").exists() and not (child / "manifest.pyc").exists():
+                continue
+
+        try:
+            module = importlib.import_module(f"{child.name}.manifest")
+        except ImportError:
             continue
 
-        module = importlib.import_module(f"{child.name}.manifest")
         tool_spec = getattr(module, "TOOL_SPEC", None)
         if tool_spec is None:
             continue
