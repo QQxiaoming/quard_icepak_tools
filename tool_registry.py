@@ -59,7 +59,7 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
         key="env_script",
         label="Ansys 环境脚本",
         browse_mode="open_file",
-        required=True,
+        required=False,
         file_filter="Scripts (*.sh *.bat *.cmd);;All Files (*)",
         default_value=default_env_script_path(),
     ),
@@ -70,13 +70,6 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
         required=True,
         file_filter="Workbench Project (*.wbpj);;All Files (*)",
         default_value=str(Path.cwd() / "test" / "01.wbpj"),
-    ),
-    ParameterSpec(
-        key="icepak_bin",
-        label="Icepak 可执行文件",
-        browse_mode="open_file",
-        required=False,
-        file_filter="Executables (*)",
     ),
 )
 

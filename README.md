@@ -40,8 +40,8 @@ Linux 下可直接执行：
 以下参数由启动器统一提供，工具本身不需要重复定义：
 
 - `env_script`：Ansys 环境脚本。
+- `env_script`：Ansys 环境脚本，可选。
 - `input_path`：测试用例路径，可以是 `.wbpj` 或可定位到 `IcepakProj` 的目录。
-- `icepak_bin`：Classic Icepak 可执行文件，可选。
 
 工具自己的 `ParameterSpec` 只需要描述该工具独有的输入项。
 

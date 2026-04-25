@@ -21,6 +21,23 @@ from PySide6.QtWidgets import (
 from tool_model import TableData, ToolExecutionResult, ToolParameters, build_output_path
 
 
+HIDDEN_COLUMNS = {"object_type", "shape_name"}
+
+
+def build_visible_table_data(table_data: TableData) -> TableData:
+    visible_indexes = [
+        index for index, column in enumerate(table_data.columns) if column not in HIDDEN_COLUMNS
+    ]
+    return TableData(
+        columns=tuple(table_data.columns[index] for index in visible_indexes),
+        rows=tuple(
+            tuple(row[index] for index in visible_indexes)
+            for row in table_data.rows
+        ),
+        default_export_name=table_data.default_export_name,
+    )
+
+
 class SortableTableWidgetItem(QTableWidgetItem):
     def __init__(self, value: str) -> None:
         super().__init__(value)
@@ -81,17 +98,18 @@ class BlockDimensionsResultDialog(QDialog):
     def set_result(self, table_data: TableData, input_path: str) -> None:
         self.current_table_data = table_data
         self.input_path = input_path
+        visible_table_data = build_visible_table_data(table_data)
 
         self.summary_label.setText(
-            f"Block 尺寸统计完成，共 {len(table_data.rows)} 行，{len(table_data.columns)} 列。"
+            f"Block 尺寸统计完成，共 {len(visible_table_data.rows)} 行，{len(visible_table_data.columns)} 列。"
         )
         self.result_table.clear()
         self.result_table.setSortingEnabled(False)
-        self.result_table.setColumnCount(len(table_data.columns))
-        self.result_table.setHorizontalHeaderLabels(list(table_data.columns))
-        self.result_table.setRowCount(len(table_data.rows))
+        self.result_table.setColumnCount(len(visible_table_data.columns))
+        self.result_table.setHorizontalHeaderLabels(list(visible_table_data.columns))
+        self.result_table.setRowCount(len(visible_table_data.rows))
 
-        for row_index, row in enumerate(table_data.rows):
+        for row_index, row in enumerate(visible_table_data.rows):
             for column_index, value in enumerate(row):
                 self.result_table.setItem(row_index, column_index, SortableTableWidgetItem(value))
 
@@ -103,7 +121,9 @@ class BlockDimensionsResultDialog(QDialog):
         if self.current_table_data is None:
             return
 
-        default_name = self.current_table_data.default_export_name
+        visible_table_data = build_visible_table_data(self.current_table_data)
+
+        default_name = visible_table_data.default_export_name
         start_path = str(Path.cwd() / default_name)
         if self.input_path:
             start_path = build_output_path(self.input_path, default_name)
@@ -119,8 +139,8 @@ class BlockDimensionsResultDialog(QDialog):
 
         with Path(output_path).expanduser().resolve().open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(self.current_table_data.columns)
-            writer.writerows(self.current_table_data.rows)
+            writer.writerow(visible_table_data.columns)
+            writer.writerows(visible_table_data.rows)
 
         QMessageBox.information(self, "导出完成", f"CSV 已导出到：\n{output_path}")
 
