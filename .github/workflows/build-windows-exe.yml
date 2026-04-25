@@ -2,6 +2,7 @@ name: Build Windows EXE
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags:
       - 'v*'
@@ -26,6 +27,18 @@ jobs:
 
       - name: Build EXE
         run: pyinstaller quard_icepak_tools.spec --noconfirm --clean
+
+      - name: Smoke-test EXE startup
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "dist\quard_icepak_tools.exe" -PassThru
+          Start-Sleep -Seconds 10
+          if ($proc.HasExited) {
+            Write-Error "EXE crashed on startup (exit code: $($proc.ExitCode))"
+            exit 1
+          }
+          Stop-Process -Id $proc.Id -Force
+          Write-Output "Smoke test passed: EXE started successfully"
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v7

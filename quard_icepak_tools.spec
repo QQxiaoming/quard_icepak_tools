@@ -15,6 +15,7 @@ datas = []
 hiddenimports = []
 
 for package_name in tool_packages:
+    hiddenimports.append(package_name)
     hiddenimports.extend(collect_submodules(package_name))
     datas.extend((str(path), package_name) for path in (project_root / package_name).glob("*.tcl"))
 
@@ -48,7 +49,7 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    disable_windowed_traceback=False,
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
