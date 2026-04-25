@@ -23,13 +23,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
+      - name: Compute build version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = ""
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME.Trim()
+          }
+
+          $shortHash = (git rev-parse --short HEAD).Trim()
+          $version = if ($tag) { "$tag-$shortHash" } else { $shortHash }
+          $safeVersion = $version -replace '[^0-9A-Za-z._-]', '-'
+          $exeName = "quard_icepak_tools-$safeVersion"
+
+          "QUARD_ICEPAK_TOOLS_VERSION=$version" >> $env:GITHUB_ENV
+          "QUARD_ICEPAK_TOOLS_EXE_NAME=$exeName" >> $env:GITHUB_ENV
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "safe_version=$safeVersion" >> $env:GITHUB_OUTPUT
+          "exe_name=$exeName" >> $env:GITHUB_OUTPUT
+
+          Set-Content -Path "build_version.py" -Encoding UTF8 -Value ("BUILD_VERSION = `"{0}`"" -f $version)
+
       - name: Build EXE
         run: pyinstaller quard_icepak_tools.spec --noconfirm --clean
 
       - name: Smoke-test EXE startup
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "dist\quard_icepak_tools.exe" -PassThru
+          $proc = Start-Process -FilePath "dist\${{ steps.version.outputs.exe_name }}.exe" -PassThru
           Start-Sleep -Seconds 10
           if ($proc.HasExited) {
             Write-Error "EXE crashed on startup (exit code: $($proc.ExitCode))"
@@ -41,6 +63,6 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v7
         with:
-          name: quard_icepak_tools-windows
+          name: quard_icepak_tools_windows
           path: dist/quard_icepak_tools.exe
           if-no-files-found: error

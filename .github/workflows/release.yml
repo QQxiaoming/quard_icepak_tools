@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'V*.*.*'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish_release_assets:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Validate semantic version tag
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^V[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$tag' is not a valid semantic version in Vx.x.x format"
+            exit 1
+          fi
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+
+      - name: Download windows artifact
+        uses: dawidd6/action-download-artifact@v20
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-windows-exe.yml
+          commit: ${{ github.sha }}
+          workflow_conclusion: success
+          name: quard_icepak_tools_windows
+          path: dist/quard_icepak_tools.exe
+          if_no_artifact_found: fail
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/quard_icepak_tools.exe
+          fail_on_unmatched_files: true
