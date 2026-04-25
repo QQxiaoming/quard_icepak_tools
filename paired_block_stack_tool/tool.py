@@ -65,7 +65,7 @@ def _run_icepak_script(
 ) -> tuple[int, list[str]]:
     logger = log or print
     project_dir = resolve_icepak_project(Path(input_path))
-    resolved_icepak_bin = resolve_icepak_bin(icepak_bin)
+    resolved_icepak_bin = resolve_icepak_bin(icepak_bin, env_script)
     command = build_command(resolved_icepak_bin, tcl_script, project_dir, env_script)
 
     logger(f"Icepak 工程：{project_dir}")

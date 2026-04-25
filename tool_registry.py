@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import platform
 import sys
 from pathlib import Path
 from tool_model import ParameterSpec, ToolSpec, build_output_path
@@ -42,6 +43,17 @@ def discover_tools() -> list[ToolSpec]:
 TOOLS = discover_tools()
 
 
+def default_env_script_path() -> str:
+    workspace_root = Path(__file__).resolve().parent
+    if platform.system().lower() == "windows":
+        local_bat = workspace_root / "ansys_env.bat"
+        if local_bat.exists():
+            return str(local_bat)
+        return str(Path.home() / "ansys_env.bat")
+
+    return str(Path.home() / "ansys-v221-env.sh")
+
+
 SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec(
         key="env_script",
@@ -49,7 +61,7 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
         browse_mode="open_file",
         required=True,
         file_filter="Scripts (*.sh *.bat *.cmd);;All Files (*)",
-        default_value=str(Path.home() / "ansys-v221-env.sh"),
+        default_value=default_env_script_path(),
     ),
     ParameterSpec(
         key="input_path",

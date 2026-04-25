@@ -33,7 +33,7 @@ def export_block_dimensions(
     logger = log or print
 
     project_dir = resolve_icepak_project(Path(input_path))
-    resolved_icepak_bin = resolve_icepak_bin(icepak_bin)
+    resolved_icepak_bin = resolve_icepak_bin(icepak_bin, env_script)
     resolved_tcl_script = resolve_tcl_script(tcl_script)
 
     command = build_command(
