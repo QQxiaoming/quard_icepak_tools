@@ -175,7 +175,16 @@ def build_command(
     project_dir: Path,
     env_script: str | None,
 ) -> list[str]:
+    icepak_args = f'-batch -run_script "{macro_path}" "{project_dir}"'
+
+    if platform.system().lower() == "windows" and icepak_bin.suffix.lower() in {".bat", ".cmd"}:
+        launch_icepak = f'call "{icepak_bin}" {icepak_args}'
+    else:
+        launch_icepak = f'"{icepak_bin}" {icepak_args}'
+
     if not env_script:
+        if platform.system().lower() == "windows" and icepak_bin.suffix.lower() in {".bat", ".cmd"}:
+            return ["cmd.exe", "/d", "/s", "/c", launch_icepak]
         return [str(icepak_bin), "-batch", "-run_script", str(macro_path), str(project_dir)]
 
     env_path = Path(env_script).expanduser().resolve()
@@ -186,15 +195,12 @@ def build_command(
     if suffix == ".sh":
         command = (
             f'source "{env_path}" && '
-            f'exec "{icepak_bin}" -batch -run_script "{macro_path}" "{project_dir}"'
+            f'exec "{icepak_bin}" {icepak_args}'
         )
         return ["bash", "-lc", command]
 
     if suffix in {".bat", ".cmd"}:
-        command = (
-            f'call "{env_path}" && '
-            f'"{icepak_bin}" -batch -run_script "{macro_path}" "{project_dir}"'
-        )
-        return ["cmd.exe", "/c", command]
+        command = f'call "{env_path}" && {launch_icepak}'
+        return ["cmd.exe", "/d", "/s", "/c", command]
 
     raise ValueError("环境脚本必须以 .sh、.bat 或 .cmd 结尾")
