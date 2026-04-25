@@ -8,8 +8,10 @@ from tool_model import ParameterSpec, ToolSpec, build_output_path
 
 
 def discover_tools() -> list[ToolSpec]:
+    # When packaged with PyInstaller, sys.frozen is True and sys._MEIPASS holds
+    # the temporary directory where bundled files are extracted at runtime.
     if getattr(sys, "frozen", False):
-        workspace_root = Path(sys._MEIPASS)
+        workspace_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     else:
         workspace_root = Path(__file__).resolve().parent
     tools: list[ToolSpec] = []
