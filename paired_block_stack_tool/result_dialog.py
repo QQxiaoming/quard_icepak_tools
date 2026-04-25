@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QBrush
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -58,6 +59,7 @@ class PairedBlockThicknessResultDialog(QDialog):
         self.current_table_data: TableData | None = None
         self.parameters: ToolParameters = {}
         self.stack_axis = "z"
+        self.highlighted_partner_name: str | None = None
 
         self.setWindowTitle("配对 Block 厚度调整")
         self.resize(1100, 720)
@@ -152,6 +154,7 @@ class PairedBlockThicknessResultDialog(QDialog):
         for row_index, row in enumerate(table_data.rows):
             for column_index, value in enumerate(row):
                 self.result_table.setItem(row_index, column_index, SortableTableWidgetItem(value))
+        self._apply_row_highlights()
         self.result_table.resizeColumnsToContents()
         self.result_table.setSortingEnabled(True)
 
@@ -195,6 +198,22 @@ class PairedBlockThicknessResultDialog(QDialog):
             self.direction_combo.setCurrentIndex(index)
         self.direction_combo.blockSignals(False)
 
+    def _apply_row_highlights(self) -> None:
+        partner_name = self.highlighted_partner_name
+        highlight_foreground = QBrush(QColor("#ffffff"))
+        highlight_background = QBrush(QColor("#c62828"))
+        default_foreground = QBrush()
+        default_background = QBrush()
+
+        for row in range(self.result_table.rowCount()):
+            name_item = self.result_table.item(row, 0)
+            is_partner_row = name_item is not None and name_item.text() == partner_name
+            for column in range(self.result_table.columnCount()):
+                item = self.result_table.item(row, column)
+                if item is not None:
+                    item.setForeground(highlight_foreground if is_partner_row else default_foreground)
+                    item.setBackground(highlight_background if is_partner_row else default_background)
+
     def sync_combo_from_table(self) -> None:
         selected_items = self.result_table.selectedItems()
         if not selected_items:
@@ -229,14 +248,21 @@ class PairedBlockThicknessResultDialog(QDialog):
         try:
             plan = self.current_plan()
         except Exception as exc:
+            self.highlighted_partner_name = None
+            self._apply_row_highlights()
             self.preview_label.setText(str(exc))
             self.apply_button.setEnabled(False)
             return
 
         if plan is None:
+            self.highlighted_partner_name = None
+            self._apply_row_highlights()
             self.preview_label.setText("暂无可调整的 block。")
             self.apply_button.setEnabled(False)
             return
+
+        self.highlighted_partner_name = plan.partner.object_name
+        self._apply_row_highlights()
 
         self.preview_label.setText(
             "配对对象："

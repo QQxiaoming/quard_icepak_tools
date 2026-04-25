@@ -62,7 +62,11 @@ foreach obj [db_list_objects_recursive] {
     set body_size [_bbox_size $body_bbox]
 
     foreach sh [db_shapes $obj] {
-        if {[$sh get -shtype] == "container"} {
+        set _shtype [$sh get -shtype]
+        if {$_shtype == "container"} {
+            continue
+        }
+        if {$_shtype != "hexa"} {
             continue
         }
 

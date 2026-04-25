@@ -16,10 +16,10 @@ def execute_paired_block_dz(parameters: dict[str, str], log=None):
 
 TOOL_SPEC = ToolSpec(
     key="paired_block_thickness_adjustment",
-    name="配对 Block 厚度调整工具",
+    name="配对 Hexa Block 厚度调整工具",
     description=(
-        "枚举所有 block，选择一个块后在独立对话框中按厚度堆叠方向的正向或反向调整厚度，"
-        "并让相邻且截面范围完全一致的另一个 block 做反向变化。"
+        "枚举所有 hexa block，选择一个块后在独立对话框中按厚度堆叠方向的正向或反向调整厚度，"
+        "并让相邻且截面范围完全一致的另一个 hexa block 做反向变化。"
     ),
     run_button_text="枚举并调整",
     parameters=(

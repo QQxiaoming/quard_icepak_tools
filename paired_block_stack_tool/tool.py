@@ -271,11 +271,11 @@ def build_adjustment_plan(
         if _cross_section_matches(selected, record, axis)
     ]
 
-    if len(touching) > 1:
-        touching_names = ", ".join(record.object_name for record in touching)
+    if len(matching_section) > 1:
+        matching_names = ", ".join(record.object_name for record in matching_section)
         raise ValueError(
             "所选方向存在多个相邻 block，无法确定唯一配对对象："
-            f"{touching_names}。"
+            f"{matching_names}。"
         )
 
     if len(matching_section) != 1:
