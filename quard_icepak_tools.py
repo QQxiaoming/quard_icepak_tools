@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app_version import get_app_version, get_window_title
 from tool_registry import (
     SHARED_PARAMETERS,
     TOOLS,
@@ -66,8 +67,9 @@ class MainWindow(QMainWindow):
         self.shared_parameter_specs: dict[str, ParameterSpec] = {}
         self.tool_parameter_widgets: dict[str, QLineEdit] = {}
         self.tool_parameter_specs: dict[str, ParameterSpec] = {}
+        self.app_version = get_app_version()
 
-        self.setWindowTitle("Quard Icepak 工具箱")
+        self.setWindowTitle(get_window_title())
         self.resize(880, 620)
 
         root = QWidget(self)
@@ -114,8 +116,16 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.clear_log_button)
         actions.addStretch(1)
 
+        status_row = QHBoxLayout()
+        status_row.setSpacing(10)
         self.status_label = QLabel("就绪", self)
         self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.version_label = QLabel(f"版本：{self.app_version}", self)
+        self.version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.version_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        status_row.addWidget(self.status_label)
+        status_row.addStretch(1)
+        status_row.addWidget(self.version_label)
 
         log_group = QGroupBox("执行日志", self)
         log_layout = QVBoxLayout(log_group)
@@ -129,7 +139,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(shared_group)
         layout.addWidget(tool_form_group)
         layout.addLayout(actions)
-        layout.addWidget(self.status_label)
+        layout.addLayout(status_row)
         layout.addWidget(log_group, 1)
 
         self.tool_combo.currentIndexChanged.connect(self.on_tool_changed)

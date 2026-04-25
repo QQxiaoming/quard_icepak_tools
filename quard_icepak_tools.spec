@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
@@ -5,6 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 spec_path = globals().get("SPEC")
 project_root = Path(spec_path).resolve().parent if spec_path else Path.cwd()
+exe_name = os.environ.get("QUARD_ICEPAK_TOOLS_EXE_NAME", "quard_icepak_tools")
 tool_packages = [
     child.name
     for child in project_root.iterdir()
@@ -41,7 +43,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='quard_icepak_tools',
+    name=exe_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
