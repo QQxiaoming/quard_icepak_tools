@@ -12,7 +12,7 @@ def discover_tools() -> list[ToolSpec]:
     for child in sorted(workspace_root.iterdir()):
         if not child.is_dir() or not child.name.endswith("_tool"):
             continue
-        if not (child / "manifest.py").exists():
+        if not (child / "manifest.py").exists() and not (child / "manifest.pyc").exists():
             continue
 
         module = importlib.import_module(f"{child.name}.manifest")
