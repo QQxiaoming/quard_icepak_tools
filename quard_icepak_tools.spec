@@ -3,7 +3,8 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
 
-project_root = Path(__file__).resolve().parent
+spec_path = globals().get("SPEC")
+project_root = Path(spec_path).resolve().parent if spec_path else Path.cwd()
 tool_packages = [
     child.name
     for child in project_root.iterdir()
