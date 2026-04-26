@@ -15,6 +15,7 @@
 - `icepak_runtime.py`：Classic Icepak 工程路径、可执行文件和批处理命令的公共解析逻辑。
 - `tool_success_handlers.py`：通用成功提示逻辑。
 - `block_dimensions_tool/`：Block 尺寸统计工具。
+- `mesh_quality_tool/`：生成网格并统计网格质量指标的工具。
 - `paired_block_stack_tool/`：配对 Hexa Block 厚度调整工具。
 - `example_tool/`：新增工具时可参考的简单示例。
 - `test/`：示例工程与测试数据。
@@ -77,7 +78,17 @@ Linux 下可直接执行：
 - 当前仅支持 `hexa` 形体。
 - 如果没有唯一相邻配对对象，或截面范围不一致，会直接报错，不允许调整。
 
-### 3. 示例工具
+### 3. 网格生成与质量评估工具
+
+目录：`mesh_quality_tool/`
+
+功能：
+
+- 调用 Classic Icepak 生成当前工程的网格。
+- 等待网格生成完成后，统计 `Quality`、`Skewness`、`Face alignment`、`Cell volume` 四项指标。
+- 在独立结果窗口中展示各指标的最小值和最大值。
+
+### 4. 示例工具
 
 目录：`example_tool/`
 
