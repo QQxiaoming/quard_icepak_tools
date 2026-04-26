@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtCore import QObject, QSettings, QThread, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_version import get_app_version, get_window_title
+from app_version import APP_NAME, get_app_version, get_window_title
 from tool_registry import (
     SHARED_PARAMETERS,
     TOOLS,
@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.thread: QThread | None = None
         self.worker: ToolWorker | None = None
+        self.settings = QSettings("QQxiaoming", APP_NAME)
         self.tool_specs = TOOLS
         self.shared_parameter_widgets: dict[str, QLineEdit] = {}
         self.shared_parameter_specs: dict[str, ParameterSpec] = {}
@@ -144,7 +145,7 @@ class MainWindow(QMainWindow):
 
         self.tool_combo.currentIndexChanged.connect(self.on_tool_changed)
         self.rebuild_shared_parameter_form()
-        self.on_tool_changed()
+        self.restore_settings()
 
     def _add_browse_row(
         self,
@@ -170,9 +171,54 @@ class MainWindow(QMainWindow):
         layout.addWidget(browse_button, row, 2)
         widgets[parameter.key] = line_edit
         specs[parameter.key] = parameter
+        line_edit.textChanged.connect(self.save_settings)
 
         if parameter.key == "input_path":
             line_edit.textChanged.connect(self.maybe_update_output_path)
+
+    def shared_setting_key(self, parameter_key: str) -> str:
+        return f"shared/{parameter_key}"
+
+    def tool_setting_key(self, tool_key: str, parameter_key: str) -> str:
+        return f"tools/{tool_key}/{parameter_key}"
+
+    def saved_shared_value(self, parameter: ParameterSpec) -> str:
+        saved_value = self.settings.value(self.shared_setting_key(parameter.key), "", type=str)
+        return saved_value or self.default_parameter_value(parameter)
+
+    def saved_tool_value(self, tool: ToolSpec, parameter: ParameterSpec) -> str:
+        saved_value = self.settings.value(
+            self.tool_setting_key(tool.key, parameter.key),
+            "",
+            type=str,
+        )
+        return saved_value or self.default_parameter_value(parameter)
+
+    def restore_settings(self) -> None:
+        self.restore_window_geometry()
+
+        for parameter in SHARED_PARAMETERS:
+            widget = self.shared_parameter_widgets.get(parameter.key)
+            if widget is None:
+                continue
+            widget.setText(self.saved_shared_value(parameter))
+
+        saved_tool_key = self.settings.value("ui/current_tool_key", "", type=str)
+        tool_index = self.tool_combo.findData(saved_tool_key)
+        if tool_index >= 0:
+            self.tool_combo.setCurrentIndex(tool_index)
+        else:
+            self.on_tool_changed()
+
+        self.restore_tool_parameter_values(self.current_tool())
+        self.save_settings()
+
+    def restore_tool_parameter_values(self, tool: ToolSpec) -> None:
+        for parameter in tool.parameters:
+            widget = self.tool_parameter_widgets.get(parameter.key)
+            if widget is None:
+                continue
+            widget.setText(self.saved_tool_value(tool, parameter))
 
     def current_tool(self) -> ToolSpec:
         index = self.tool_combo.currentIndex()
@@ -182,9 +228,10 @@ class MainWindow(QMainWindow):
         tool = self.current_tool()
         self.tool_description.setText(tool.description)
         self.run_button.setText(tool.run_button_text)
-        previous_values = self.collect_tool_parameter_values()
-        self.rebuild_parameter_form(tool, previous_values)
+        self.rebuild_parameter_form(tool)
+        self.restore_tool_parameter_values(tool)
         self.clear_table_result()
+        self.save_settings()
 
     def collect_shared_parameter_values(self) -> ToolParameters:
         return {
@@ -220,13 +267,12 @@ class MainWindow(QMainWindow):
                 self.shared_parameter_specs,
                 row,
                 parameter,
-                self.default_parameter_value(parameter),
+                self.saved_shared_value(parameter),
             )
 
     def rebuild_parameter_form(
         self,
         tool: ToolSpec,
-        previous_values: ToolParameters,
     ) -> None:
         while self.tool_form_layout.count():
             item = self.tool_form_layout.takeAt(0)
@@ -238,17 +284,13 @@ class MainWindow(QMainWindow):
         self.tool_parameter_specs = {}
 
         for row, parameter in enumerate(tool.parameters):
-            if parameter.default_output_name:
-                value = self.default_parameter_value(parameter)
-            else:
-                value = previous_values.get(parameter.key) or self.default_parameter_value(parameter)
             self._add_browse_row(
                 self.tool_form_layout,
                 self.tool_parameter_widgets,
                 self.tool_parameter_specs,
                 row,
                 parameter,
-                value,
+                self.saved_tool_value(tool, parameter),
             )
 
         self.maybe_update_output_path()
@@ -282,6 +324,31 @@ class MainWindow(QMainWindow):
 
     def clear_log(self) -> None:
         self.log_view.clear()
+
+    def restore_window_geometry(self) -> None:
+        saved_geometry = self.settings.value("ui/window_geometry")
+        if saved_geometry is not None:
+            self.restoreGeometry(saved_geometry)
+
+    def save_settings(self) -> None:
+        self.settings.setValue("ui/current_tool_key", self.current_tool().key)
+
+        for key, widget in self.shared_parameter_widgets.items():
+            self.settings.setValue(self.shared_setting_key(key), widget.text().strip())
+
+        current_tool = self.current_tool()
+        for key, widget in self.tool_parameter_widgets.items():
+            self.settings.setValue(
+                self.tool_setting_key(current_tool.key, key),
+                widget.text().strip(),
+            )
+
+        self.settings.sync()
+
+    def closeEvent(self, event) -> None:
+        self.settings.setValue("ui/window_geometry", self.saveGeometry())
+        self.save_settings()
+        super().closeEvent(event)
 
     def clear_table_result(self) -> None:
         return
