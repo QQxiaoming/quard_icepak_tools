@@ -60,6 +60,8 @@ class ToolSpec:
     executor: ToolExecutor
     internal_parameters: ToolParameters = field(default_factory=dict)
     success_handler: ToolSuccessHandler | None = None
+    source_path: str = ""
+    is_builtin: bool = True
 
     def parameter(self, key: str) -> ParameterSpec | None:
         for parameter in self.parameters:

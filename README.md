@@ -6,6 +6,8 @@
 
 当前工具以“每个工具一个目录”的方式组织，主界面负责公共配置、自动发现和执行，具体业务逻辑、Tcl 脚本、结果对话框都放在各自工具目录内。
 
+除了内置工具外，打包后的程序也支持在主界面中动态加载用户自己的工具压缩包，并支持后续卸载。
+
 ## 当前目录结构
 
 - `quard_icepak_tools.py`：主界面入口。
@@ -113,6 +115,30 @@ Linux 下可直接执行：
 
 `manifest.py` 必须暴露名为 `TOOL_SPEC` 的顶层变量。
 
+## 加载用户自定义工具
+
+主界面工具选择区域提供了“加载工具”和“卸载工具”按钮。
+
+使用方式：
+
+1. 用户先按现有规范准备一个工具目录，例如 `my_extra_tool/`。
+2. 目录内至少放入 `manifest.py`、实现用的 `*.py` 文件，以及该工具依赖的 `*.tcl` 文件。
+3. 将整个工具目录压成一个 `.zip` 文件。
+4. 在主界面点击“加载工具”，选择这个 zip。
+5. 加载成功后，工具会立即出现在主界面工具列表中。
+
+卸载规则：
+
+- 只有通过“加载工具”安装的用户工具支持卸载。
+- 内置工具不允许卸载。
+- 卸载后，该工具会从工具列表中移除。
+
+zip 打包规则：
+
+- 推荐做法：zip 根目录直接包含一个以 `_tool` 结尾的工具目录。
+- 兼容做法：zip 根目录直接放 `manifest.py`、`tool.py`、`*.tcl` 等文件，程序会在安装时自动整理为一个 `*_tool` 目录。
+- 工具 `key` 必须唯一，不能与已有内置工具或已安装用户工具冲突。
+
 ## 新增工具的最小模板
 
 目录示例：
@@ -164,14 +190,16 @@ TOOL_SPEC = ToolSpec(
 ```python
 from pathlib import Path
 
-from tool_model import ToolExecutionResult
+from tool_model import ProgressUpdate, ToolExecutionResult
 
 
 DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("my_script.tcl")
 
 
-def run_my_tool(parameters: dict[str, str], log=None) -> ToolExecutionResult:
+def run_my_tool(parameters: dict[str, str], log=None, progress=None) -> ToolExecutionResult:
     logger = log or print
+    if progress is not None:
+        progress(ProgressUpdate(mode="determinate", value=20, maximum=100, message="正在准备工具..."))
     logger(f"运行参数：{parameters}")
     return ToolExecutionResult(exit_code=0)
 ```
