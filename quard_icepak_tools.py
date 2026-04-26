@@ -259,6 +259,12 @@ class MainWindow(QMainWindow):
 
         saved_tool_key = self.settings.value("ui/current_tool_key", "", type=str)
         tool_index = self.tool_combo.findData(saved_tool_key)
+        if not self.tool_specs:
+            self.tool_description.setText("未发现可用工具。")
+            self.run_button.setEnabled(False)
+            self.unload_tool_button.setEnabled(False)
+            return
+
         if tool_index >= 0:
             self.tool_combo.setCurrentIndex(tool_index)
         else:
@@ -275,6 +281,8 @@ class MainWindow(QMainWindow):
             widget.setText(self.saved_tool_value(tool, parameter))
 
     def current_tool(self) -> ToolSpec:
+        if not self.tool_specs:
+            raise IndexError("No tools available")
         index = self.tool_combo.currentIndex()
         return self.tool_specs[index]
 

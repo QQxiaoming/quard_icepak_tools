@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import hashlib
 import importlib.util
 import platform
@@ -76,6 +77,19 @@ def _module_prefix_for_tool(tool_dir: Path) -> str:
     return f"{_DYNAMIC_NAMESPACE}.{tool_dir.name}_{digest}"
 
 
+def _load_builtin_tool_spec(tool_dir: Path) -> ToolSpec | None:
+    try:
+        module = importlib.import_module(f"{tool_dir.name}.manifest")
+    except Exception:
+        return None
+
+    tool_spec = getattr(module, "TOOL_SPEC", None)
+    if not isinstance(tool_spec, ToolSpec):
+        return None
+
+    return replace(tool_spec, source_path=str(tool_dir), is_builtin=True)
+
+
 def _load_tool_spec_from_directory(
     tool_dir: Path,
     *,
@@ -83,6 +97,11 @@ def _load_tool_spec_from_directory(
     error_summary: str | None = None,
 ) -> ToolSpec | None:
     manifest_path = tool_dir / "manifest.py"
+    if is_builtin:
+        builtin_tool = _load_builtin_tool_spec(tool_dir)
+        if builtin_tool is not None:
+            return builtin_tool
+
     if not manifest_path.exists():
         return None
 
