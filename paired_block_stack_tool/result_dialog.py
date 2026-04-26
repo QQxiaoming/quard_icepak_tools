@@ -822,6 +822,5 @@ def show_paired_block_dz_result(
     dialog.destroyed.connect(lambda *_args: setattr(parent, "_paired_block_thickness_dialog", None))
     dialog.setAttribute(Qt.WA_DeleteOnClose, True)
     dialog.set_result(result.table_data, parameters)
-    dialog.show()
-    dialog.raise_()
-    dialog.activateWindow()
+    dialog.setWindowModality(Qt.WindowModal)
+    dialog.exec()

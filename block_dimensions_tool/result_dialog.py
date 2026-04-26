@@ -160,6 +160,5 @@ def show_block_dimensions_result(
     )
     dialog.setAttribute(Qt.WA_DeleteOnClose, True)
     dialog.set_result(result.table_data, parameters.get("input_path", ""))
-    dialog.show()
-    dialog.raise_()
-    dialog.activateWindow()
+    dialog.setWindowModality(Qt.WindowModal)
+    dialog.exec()
