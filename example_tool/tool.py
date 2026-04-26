@@ -6,22 +6,22 @@ from typing import Callable
 from tool_model import ToolExecutionResult
 
 
-DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("placeholder_example.tcl")
+DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("example_tool.tcl")
 
 
-def run_placeholder_tool(
+def run_example_tool(
     parameters: dict[str, str],
     log: Callable[[str], None] | None = None,
 ) -> ToolExecutionResult:
     logger = log or print
 
-    tool_name = parameters.get("tool_name", "placeholder_tool")
+    tool_name = parameters.get("tool_name", "example_tool")
     case_path = Path(parameters["input_path"]).expanduser().resolve()
     note = parameters.get("note", "")
     tcl_script = parameters.get("tcl_script", "")
 
     lines = [
-        "# Icepak Placeholder Tool Output",
+        "# Icepak Example Tool Output",
         "",
         f"tool_name: {tool_name}",
         f"input_path: {case_path}",
@@ -29,7 +29,7 @@ def run_placeholder_tool(
         f"note: {note or '<empty>'}",
         "",
         "This is a template tool entry used to demonstrate how to add new tools to the GUI registry.",
-        "Replace run_placeholder_tool with real execution logic when you add the next Icepak automation flow.",
+        "Replace run_example_tool with real execution logic when you add the next Icepak automation flow.",
     ]
 
     logger(f"模板工具名称：{tool_name}")

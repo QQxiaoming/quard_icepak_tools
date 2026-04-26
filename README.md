@@ -16,7 +16,7 @@
 - `tool_success_handlers.py`：通用成功提示逻辑。
 - `block_dimensions_tool/`：Block 尺寸统计工具。
 - `paired_block_stack_tool/`：配对 Hexa Block 厚度调整工具。
-- `placeholder_tool/`：新增工具时可参考的模板示例。
+- `example_tool/`：新增工具时可参考的简单示例。
 - `test/`：示例工程与测试数据。
 
 ## 如何启动
@@ -77,9 +77,9 @@ Linux 下可直接执行：
 - 当前仅支持 `hexa` 形体。
 - 如果没有唯一相邻配对对象，或截面范围不一致，会直接报错，不允许调整。
 
-### 3. 模板工具示例
+### 3. 示例工具
 
-目录：`placeholder_tool/`
+目录：`example_tool/`
 
 作用：
 

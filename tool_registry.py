@@ -37,6 +37,7 @@ def discover_tools() -> list[ToolSpec]:
             continue
         tools.append(tool_spec)
 
+    tools.sort(key=lambda tool: (tool.key == "example_template", tool.name.casefold()))
     return tools
 
 
