@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -38,7 +39,7 @@ class MeshQualityResultDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("网格质量评估结果")
-        self.resize(860, 520)
+        self.resize(980, 760)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -63,6 +64,11 @@ class MeshQualityResultDialog(QDialog):
         self.result_table.horizontalHeader().setSectionsClickable(True)
         self.result_table.horizontalHeader().setSortIndicatorShown(True)
 
+        self.report_view = QPlainTextEdit(self)
+        self.report_view.setReadOnly(True)
+        self.report_view.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        self.report_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         actions = QHBoxLayout()
         actions.addStretch(1)
         close_button = QPushButton("关闭", self)
@@ -72,9 +78,10 @@ class MeshQualityResultDialog(QDialog):
         layout.addWidget(self.summary_label)
         layout.addWidget(self.hint_label)
         layout.addWidget(self.result_table, 1)
+        layout.addWidget(self.report_view, 1)
         layout.addLayout(actions)
 
-    def set_result(self, table_data: TableData) -> None:
+    def set_result(self, table_data: TableData, report_text: str | None) -> None:
         self.summary_label.setText(
             f"网格生成完成，已统计 {len(table_data.rows)} 项质量指标。"
         )
@@ -90,6 +97,7 @@ class MeshQualityResultDialog(QDialog):
 
         self.result_table.resizeColumnsToContents()
         self.result_table.setSortingEnabled(True)
+        self.report_view.setPlainText(report_text or "未生成诊断建议。")
 
 
 def show_mesh_quality_result(
@@ -107,6 +115,6 @@ def show_mesh_quality_result(
         lambda *_args: setattr(parent, "_mesh_quality_result_dialog", None)
     )
     dialog.setAttribute(Qt.WA_DeleteOnClose, True)
-    dialog.set_result(result.table_data)
+    dialog.set_result(result.table_data, result.report_text)
     dialog.setWindowModality(Qt.WindowModal)
     dialog.exec()

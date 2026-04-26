@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Callable
 
 from icepak_runtime import build_command, resolve_icepak_bin, resolve_icepak_project
-from tool_model import TableData, ToolExecutionResult
+from tool_model import ProgressUpdate, TableData, ToolExecutionResult
 
 
 DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("print_block_dimensions.tcl")
 TABLE_COLUMNS_PREFIX = "__QD_TABLE_COLUMNS__\t"
 TABLE_ROW_PREFIX = "__QD_TABLE_ROW__\t"
+PROGRESS_PREFIX = "__QD_PROGRESS__\t"
 
 def resolve_tcl_script(explicit: str | None) -> Path:
     if explicit:
@@ -29,6 +30,7 @@ def export_block_dimensions(
     env_script: str | None = None,
     tcl_script: str | None = None,
     log: Callable[[str], None] | None = None,
+    progress: Callable[[ProgressUpdate], None] | None = None,
 ) -> ToolExecutionResult:
     logger = log or print
 
@@ -46,6 +48,8 @@ def export_block_dimensions(
     logger(f"Icepak 工程：{project_dir}")
     logger(f"Icepak 可执行文件：{resolved_icepak_bin}")
     logger(f"Tcl 脚本：{resolved_tcl_script}")
+    if progress is not None:
+        progress(ProgressUpdate(mode="indeterminate", message="正在启动 Block 尺寸统计..."))
 
     columns: list[str] = []
     rows: list[tuple[str, ...]] = []
@@ -62,6 +66,22 @@ def export_block_dimensions(
     assert process.stdout is not None
     for line in process.stdout:
         stripped = line.rstrip()
+        if stripped.startswith(PROGRESS_PREFIX):
+            parts = stripped[len(PROGRESS_PREFIX) :].split("\t")
+            if len(parts) >= 4 and progress is not None:
+                mode, value, maximum, message = parts[:4]
+                if mode == "determinate":
+                    progress(
+                        ProgressUpdate(
+                            mode="determinate",
+                            value=int(value),
+                            maximum=int(maximum),
+                            message=message,
+                        )
+                    )
+                elif mode == "indeterminate":
+                    progress(ProgressUpdate(mode="indeterminate", message=message))
+            continue
         if stripped.startswith(TABLE_COLUMNS_PREFIX):
             columns = stripped[len(TABLE_COLUMNS_PREFIX) :].split("\t")
             continue
@@ -78,4 +98,6 @@ def export_block_dimensions(
             rows=tuple(rows),
             default_export_name="block_dimensions.csv",
         )
+    if progress is not None:
+        progress(ProgressUpdate(mode="determinate", value=99, maximum=100, message="Block 尺寸统计完成，正在整理结果..."))
     return ToolExecutionResult(exit_code=exit_code, table_data=table_data)

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
+    QProgressBar,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -29,7 +30,14 @@ from tool_registry import (
     SHARED_PARAMETERS,
     TOOLS,
 )
-from tool_model import ParameterSpec, ToolExecutionResult, ToolParameters, ToolSpec, build_output_path
+from tool_model import (
+    ParameterSpec,
+    ProgressUpdate,
+    ToolExecutionResult,
+    ToolParameters,
+    ToolSpec,
+    build_output_path,
+)
 
 
 @dataclass
@@ -40,6 +48,7 @@ class ExecutionRequest:
 
 class ToolWorker(QObject):
     log = Signal(str)
+    progress = Signal(object)
     finished = Signal(object)
     failed = Signal(str)
 
@@ -49,7 +58,11 @@ class ToolWorker(QObject):
 
     def run(self) -> None:
         try:
-            exit_code = self.request.tool.executor(self.request.parameters, self.log.emit)
+            exit_code = self.request.tool.executor(
+                self.request.parameters,
+                self.log.emit,
+                self.progress.emit,
+            )
         except Exception as exc:
             self.failed.emit(str(exc))
             return
@@ -121,12 +134,16 @@ class MainWindow(QMainWindow):
         status_row.setSpacing(10)
         self.status_label = QLabel("就绪", self)
         self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.version_label = QLabel(f"版本：{self.app_version}", self)
-        self.version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.version_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        status_row.addWidget(self.status_label)
+        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setFixedWidth(180)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        status_row.addWidget(self.status_label, 1)
         status_row.addStretch(1)
-        status_row.addWidget(self.version_label)
+        status_row.addWidget(self.progress_bar)
 
         log_group = QGroupBox("执行日志", self)
         log_layout = QVBoxLayout(log_group)
@@ -438,7 +455,42 @@ class MainWindow(QMainWindow):
 
     def set_running(self, running: bool) -> None:
         self.run_button.setEnabled(not running)
-        self.status_label.setText("运行中..." if running else "就绪")
+        if running:
+            self.status_label.setText("运行中...")
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("")
+
+    def reset_progress_display(self, status_text: str) -> None:
+        self.status_label.setText(status_text)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")
+
+    def complete_progress_display(self, status_text: str) -> None:
+        self.status_label.setText(status_text)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(100)
+        self.progress_bar.setFormat("%p%")
+
+    def apply_progress_update(self, update: ProgressUpdate) -> None:
+        if update.message:
+            self.status_label.setText(update.message)
+
+        if update.mode == "indeterminate":
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("")
+            return
+
+        if update.mode == "determinate":
+            maximum = max(1, update.maximum)
+            value = min(max(update.value, 0), maximum)
+            self.progress_bar.setRange(0, maximum)
+            self.progress_bar.setValue(value)
+            self.progress_bar.setFormat("%p%")
+            return
+
+        if update.mode == "hidden":
+            self.reset_progress_display(self.status_label.text())
 
     def start_tool(self) -> None:
         if self.thread is not None:
@@ -467,6 +519,7 @@ class MainWindow(QMainWindow):
 
         self.thread.started.connect(self.worker.run)
         self.worker.log.connect(self.append_log)
+        self.worker.progress.connect(self.apply_progress_update)
         self.worker.finished.connect(self.on_finished)
         self.worker.failed.connect(self.on_failed)
         self.worker.finished.connect(self.thread.quit)
@@ -475,24 +528,26 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
     def on_finished(self, result: ToolExecutionResult) -> None:
-        self.set_running(False)
         if result.exit_code == 0:
-            self.status_label.setText("已完成")
+            self.run_button.setEnabled(True)
             self.append_log("工具执行成功。")
             tool = self.current_tool()
             parameters = self.collect_parameter_values()
             parameters.update(tool.internal_parameters)
+            self.complete_progress_display("正在显示结果...")
             tool.success_handler(self, result, parameters)
+            self.reset_progress_display("已完成")
             self.append_log("工具成功后的界面反馈已完成。")
             return
 
-        self.status_label.setText(f"执行失败，退出码 {result.exit_code}")
+        self.run_button.setEnabled(True)
+        self.reset_progress_display(f"执行失败，退出码 {result.exit_code}")
         self.append_log(f"工具执行失败，退出码 {result.exit_code}。")
         QMessageBox.critical(self, "失败", f"工具执行失败，退出码 {result.exit_code}。")
 
     def on_failed(self, message: str) -> None:
-        self.set_running(False)
-        self.status_label.setText("失败")
+        self.run_button.setEnabled(True)
+        self.reset_progress_display("失败")
         self.append_log(f"错误：{message}")
         QMessageBox.critical(self, "错误", message)
 

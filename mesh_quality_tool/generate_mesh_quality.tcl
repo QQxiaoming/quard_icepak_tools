@@ -1,6 +1,14 @@
 set table_columns [list metric_key metric_label minimum maximum unit interpretation]
 puts [join [linsert $table_columns 0 "__QD_TABLE_COLUMNS__"] "\t"]
 
+proc _emit_context {category key label value {unit ""}} {
+    puts [join [list "__QD_CONTEXT__" $category $key $label $value $unit] "\t"]
+}
+
+proc _emit_progress {mode value maximum message} {
+    puts [join [list "__QD_PROGRESS__" $mode $value $maximum $message] "\t"]
+}
+
 proc _metric_spec {metric_key} {
     switch -- $metric_key {
         det_aspect {
@@ -31,8 +39,51 @@ proc _emit_metric_row {metric_key min_value max_value} {
         $interpretation] "\t"]
 }
 
+proc _emit_model_and_mesh_context {} {
+    global grid_type grid_settings_type grid_size_x grid_size_y grid_size_z
+    global grid_sep_x grid_sep_y grid_sep_z grid_sep_x_units grid_sep_y_units grid_sep_z_units
+    global grid_max_elements grid_tetra_smqual grid_tetra_smiters grid_enable_prism_layer
+    global grid_tetra_prism_num grid_hdm_feature_angle grid_hdm_refine_features
+    global grid_include_all_gaps meshing_units
+
+    _emit_context mesh grid_type "网格类型" $grid_type ""
+    _emit_context mesh grid_settings_type "网格设置档位" $grid_settings_type ""
+    _emit_context mesh grid_size_x "全局尺寸 X" $grid_size_x $meshing_units
+    _emit_context mesh grid_size_y "全局尺寸 Y" $grid_size_y $meshing_units
+    _emit_context mesh grid_size_z "全局尺寸 Z" $grid_size_z $meshing_units
+    _emit_context mesh grid_sep_x "最小分离间隙 X" $grid_sep_x $grid_sep_x_units
+    _emit_context mesh grid_sep_y "最小分离间隙 Y" $grid_sep_y $grid_sep_y_units
+    _emit_context mesh grid_sep_z "最小分离间隙 Z" $grid_sep_z $grid_sep_z_units
+    _emit_context mesh grid_max_elements "最大单元数" $grid_max_elements ""
+    _emit_context mesh grid_tetra_smqual "平滑质量阈值" $grid_tetra_smqual ""
+    _emit_context mesh grid_tetra_smiters "平滑迭代次数" $grid_tetra_smiters ""
+    _emit_context mesh grid_enable_prism_layer "棱柱层开关" $grid_enable_prism_layer ""
+    _emit_context mesh grid_tetra_prism_num "棱柱层数" $grid_tetra_prism_num ""
+    _emit_context mesh grid_hdm_feature_angle "特征角" $grid_hdm_feature_angle "deg"
+    _emit_context mesh grid_hdm_refine_features "特征细化开关" $grid_hdm_refine_features ""
+    _emit_context mesh grid_include_all_gaps "全部窄缝包含开关" $grid_include_all_gaps ""
+
+    set object_count 0
+    set block_count 0
+    foreach obj [db_list_objects_recursive] {
+        incr object_count
+        if {[catch {set obtype [$obj getval obtype]}]} {
+            continue
+        }
+        if {$obtype == "block"} {
+            incr block_count
+        }
+    }
+    _emit_context model object_count "模型对象数" $object_count ""
+    _emit_context model block_count "block 数" $block_count ""
+}
+
 puts "=== Icepak mesh generation and quality evaluation ==="
 puts "开始生成网格，请等待 ..."
+
+_emit_model_and_mesh_context
+_emit_progress determinate 5 100 "已读取模型与网格参数"
+_emit_progress indeterminate 0 0 "正在生成网格..."
 
 if {[catch {
     grid_generate
@@ -45,9 +96,16 @@ if {[catch {
 }
 
 puts "网格生成完成，开始统计质量指标 ..."
+_emit_progress determinate 70 100 "网格生成完成，开始评估质量"
 
 global grid_quality_limits
-foreach metric_key {det_aspect skewness facealign volume} {
+set metric_keys {det_aspect skewness facealign volume}
+set metric_total [llength $metric_keys]
+set metric_index 0
+foreach metric_key $metric_keys {
+    incr metric_index
+    set progress_value [expr {70 + int(24.0 * $metric_index / $metric_total)}]
+    _emit_progress determinate $progress_value 100 [format "正在评估质量指标 %d / %d" $metric_index $metric_total]
     if {[catch {
         set min_value [grid_compute_quality $metric_key 0]
         set limits $grid_quality_limits($metric_key)
@@ -70,4 +128,5 @@ if {[catch {auto_save_all} err opts]} {
 }
 
 puts "=== Mesh quality evaluation done ==="
+_emit_progress determinate 99 100 "网格质量评估完成，正在整理结果..."
 exit 0

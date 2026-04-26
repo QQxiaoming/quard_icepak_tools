@@ -4,13 +4,14 @@ from .result_dialog import show_mesh_quality_result
 from .tool import DEFAULT_TCL_SCRIPT, generate_mesh_quality_report
 
 
-def execute_mesh_quality(parameters: dict[str, str], log=None):
+def execute_mesh_quality(parameters: dict[str, str], log=None, progress=None):
     return generate_mesh_quality_report(
         input_path=parameters["input_path"],
         icepak_bin=parameters.get("icepak_bin") or None,
         env_script=parameters.get("env_script") or None,
         tcl_script=parameters.get("tcl_script") or None,
         log=log,
+        progress=progress,
     )
 
 

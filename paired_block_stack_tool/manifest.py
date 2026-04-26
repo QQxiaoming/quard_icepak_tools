@@ -4,13 +4,14 @@ from .result_dialog import show_paired_block_dz_result
 from .tool import DEFAULT_LIST_TCL_SCRIPT, list_block_dimensions
 
 
-def execute_paired_block_dz(parameters: dict[str, str], log=None):
+def execute_paired_block_dz(parameters: dict[str, str], log=None, progress=None):
     return list_block_dimensions(
         input_path=parameters["input_path"],
         icepak_bin=parameters.get("icepak_bin") or None,
         env_script=parameters.get("env_script") or None,
         tcl_script=parameters.get("tcl_script") or None,
         log=log,
+        progress=progress,
     )
 
 

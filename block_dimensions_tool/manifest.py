@@ -4,13 +4,14 @@ from .result_dialog import show_block_dimensions_result
 from .tool import DEFAULT_TCL_SCRIPT, export_block_dimensions
 
 
-def execute_block_dimensions(parameters: dict[str, str], log=None) -> int:
+def execute_block_dimensions(parameters: dict[str, str], log=None, progress=None) -> int:
     return export_block_dimensions(
         input_path=parameters["input_path"],
         icepak_bin=parameters.get("icepak_bin") or None,
         env_script=parameters.get("env_script") or None,
         tcl_script=parameters.get("tcl_script") or None,
         log=log,
+        progress=progress,
     )
 
 

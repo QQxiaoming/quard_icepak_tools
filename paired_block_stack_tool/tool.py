@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from icepak_runtime import build_command, resolve_icepak_bin, resolve_icepak_project
-from tool_model import TableData, ToolExecutionResult
+from tool_model import ProgressUpdate, TableData, ToolExecutionResult
 
 
 DEFAULT_LIST_TCL_SCRIPT = Path(__file__).resolve().with_name("list_blocks.tcl")
 DEFAULT_ADJUST_TCL_SCRIPT = Path(__file__).resolve().with_name("adjust_pair_dz.tcl")
 TABLE_COLUMNS_PREFIX = "__QD_TABLE_COLUMNS__\t"
 TABLE_ROW_PREFIX = "__QD_TABLE_ROW__\t"
+PROGRESS_PREFIX = "__QD_PROGRESS__\t"
 EPSILON_MM = 1.0e-6
 
 
@@ -62,6 +63,7 @@ def _run_icepak_script(
     tcl_script: Path,
     extra_env: dict[str, str] | None = None,
     log: Callable[[str], None] | None = None,
+    progress: Callable[[ProgressUpdate], None] | None = None,
 ) -> tuple[int, list[str]]:
     logger = log or print
     project_dir = resolve_icepak_project(Path(input_path))
@@ -90,6 +92,22 @@ def _run_icepak_script(
     for line in process.stdout:
         stripped = line.rstrip()
         lines.append(stripped)
+        if stripped.startswith(PROGRESS_PREFIX):
+            parts = stripped[len(PROGRESS_PREFIX) :].split("\t")
+            if len(parts) >= 4 and progress is not None:
+                mode, value, maximum, message = parts[:4]
+                if mode == "determinate":
+                    progress(
+                        ProgressUpdate(
+                            mode="determinate",
+                            value=int(value),
+                            maximum=int(maximum),
+                            message=message,
+                        )
+                    )
+                elif mode == "indeterminate":
+                    progress(ProgressUpdate(mode="indeterminate", message=message))
+            continue
         logger(stripped)
 
     return process.wait(), lines
@@ -122,16 +140,22 @@ def list_block_dimensions(
     env_script: str | None = None,
     tcl_script: str | None = None,
     log: Callable[[str], None] | None = None,
+    progress: Callable[[ProgressUpdate], None] | None = None,
 ) -> ToolExecutionResult:
     resolved_tcl_script = resolve_tcl_script(tcl_script, DEFAULT_LIST_TCL_SCRIPT)
+    if progress is not None:
+        progress(ProgressUpdate(mode="indeterminate", message="正在枚举 hexa block..."))
     exit_code, lines = _run_icepak_script(
         input_path=input_path,
         icepak_bin=icepak_bin,
         env_script=env_script,
         tcl_script=resolved_tcl_script,
         log=log,
+        progress=progress,
     )
     table_data = _parse_table_output(lines, default_export_name="paired_block_dz_blocks.csv")
+    if progress is not None:
+        progress(ProgressUpdate(mode="determinate", value=99, maximum=100, message="Hexa block 枚举完成，正在整理结果..."))
     return ToolExecutionResult(exit_code=exit_code, table_data=table_data)
 
 

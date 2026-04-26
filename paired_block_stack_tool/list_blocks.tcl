@@ -48,6 +48,7 @@ puts [format "Length unit: %s" $length_unit]
 puts "__QD_TABLE_COLUMNS__\tobject_name\tobject_type\tshape_name\tshape_type\tlength_unit\tdx\tdy\tdz\txmin\txmax\tymin\tymax\tzmin\tzmax"
 
 set count 0
+set block_objects [list]
 foreach obj [db_list_objects_recursive] {
     if {[$obj getval mat_lib_path ""] != ""} {
         continue
@@ -55,6 +56,16 @@ foreach obj [db_list_objects_recursive] {
     if {[$obj getval obtype] != "block"} {
         continue
     }
+    lappend block_objects $obj
+}
+
+set total_blocks [llength $block_objects]
+puts [join [list "__QD_PROGRESS__" "determinate" 0 [expr {$total_blocks > 0 ? $total_blocks : 1}] "正在枚举 hexa block..."] "\t"]
+
+set block_index 0
+foreach obj $block_objects {
+    incr block_index
+    puts [join [list "__QD_PROGRESS__" "determinate" $block_index [expr {$total_blocks > 0 ? $total_blocks : 1}] [format "正在处理 block %d / %d" $block_index $total_blocks]] "\t"]
 
     set obj_name [$obj getval name]
     set body_bbox ""
@@ -116,4 +127,5 @@ foreach obj [db_list_objects_recursive] {
 }
 
 puts [format "=== Collected %d shape records ===" $count]
+puts [join [list "__QD_PROGRESS__" "determinate" [expr {$total_blocks > 0 ? $total_blocks : 1}] [expr {$total_blocks > 0 ? $total_blocks : 1}] "Hexa block 枚举完成"] "\t"]
 exit 0

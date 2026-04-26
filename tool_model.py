@@ -9,6 +9,14 @@ ToolParameters = dict[str, str]
 
 
 @dataclass(frozen=True)
+class ProgressUpdate:
+    mode: str
+    value: int = 0
+    maximum: int = 100
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class TableData:
     columns: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]
@@ -19,9 +27,14 @@ class TableData:
 class ToolExecutionResult:
     exit_code: int
     table_data: TableData | None = None
+    report_text: str | None = None
 
 
-ToolExecutor = Callable[[ToolParameters, Callable[[str], None] | None], ToolExecutionResult]
+ToolProgressCallback = Callable[[ProgressUpdate], None]
+ToolExecutor = Callable[
+    [ToolParameters, Callable[[str], None] | None, ToolProgressCallback | None],
+    ToolExecutionResult,
+]
 ToolSuccessHandler = Callable[[Any, ToolExecutionResult, ToolParameters], None]
 
 

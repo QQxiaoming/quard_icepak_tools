@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from tool_model import ToolExecutionResult
+from tool_model import ProgressUpdate, ToolExecutionResult
 
 
 DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("example_tool.tcl")
@@ -12,8 +12,11 @@ DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("example_tool.tcl")
 def run_example_tool(
     parameters: dict[str, str],
     log: Callable[[str], None] | None = None,
+    progress: Callable[[ProgressUpdate], None] | None = None,
 ) -> ToolExecutionResult:
     logger = log or print
+    if progress is not None:
+        progress(ProgressUpdate(mode="determinate", value=20, maximum=100, message="正在准备示例工具..."))
 
     tool_name = parameters.get("tool_name", "example_tool")
     case_path = Path(parameters["input_path"]).expanduser().resolve()
@@ -39,5 +42,7 @@ def run_example_tool(
     if note:
         logger(f"备注：{note}")
     logger("模板工具执行成功。")
+    if progress is not None:
+        progress(ProgressUpdate(mode="determinate", value=99, maximum=100, message="示例工具执行完成，正在整理结果..."))
 
     return ToolExecutionResult(exit_code=0)
