@@ -60,6 +60,7 @@ def export_block_dimensions(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
 

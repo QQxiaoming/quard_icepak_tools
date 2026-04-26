@@ -85,6 +85,7 @@ def _run_icepak_script(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
 

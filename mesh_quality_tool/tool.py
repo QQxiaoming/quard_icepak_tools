@@ -336,6 +336,7 @@ def generate_mesh_quality_report(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
 
