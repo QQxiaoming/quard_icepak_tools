@@ -328,6 +328,13 @@ class MainWindow(QMainWindow):
         self.on_tool_changed()
 
     def on_tool_changed(self) -> None:
+        if not self.tool_specs:
+            self.tool_description.setText("未发现可用工具。")
+            self.run_button.setEnabled(False)
+            self.unload_tool_button.setEnabled(False)
+            self.load_tool_button.setEnabled(self.thread is None)
+            return
+
         tool = self.current_tool()
         self.tool_description.setText(tool.description)
         self.run_button.setText(tool.run_button_text)
@@ -436,17 +443,18 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(saved_geometry)
 
     def save_settings(self) -> None:
-        self.settings.setValue("ui/current_tool_key", self.current_tool().key)
-
         for key, widget in self.shared_parameter_widgets.items():
             self.settings.setValue(self.shared_setting_key(key), widget.text().strip())
 
-        current_tool = self.current_tool()
-        for key, widget in self.tool_parameter_widgets.items():
-            self.settings.setValue(
-                self.tool_setting_key(current_tool.key, key),
-                widget.text().strip(),
-            )
+        if self.tool_specs:
+            current_tool = self.current_tool()
+            self.settings.setValue("ui/current_tool_key", current_tool.key)
+
+            for key, widget in self.tool_parameter_widgets.items():
+                self.settings.setValue(
+                    self.tool_setting_key(current_tool.key, key),
+                    widget.text().strip(),
+                )
 
         self.settings.sync()
 
