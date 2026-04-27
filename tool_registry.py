@@ -281,14 +281,7 @@ TOOLS = discover_tools()
 
 
 def default_env_script_path() -> str:
-    workspace_root = Path(__file__).resolve().parent
-    if platform.system().lower() == "windows":
-        local_bat = workspace_root / "ansys_env.bat"
-        if local_bat.exists():
-            return str(local_bat)
-        return str(Path.home() / "ansys_env.bat")
-
-    return str(Path.home() / "ansys-v221-env.sh")
+    return ""
 
 
 SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (

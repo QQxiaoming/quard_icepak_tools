@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
+    QFrame,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -21,7 +22,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QProgressBar,
+    QScrollArea,
     QSizePolicy,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -115,92 +118,360 @@ class MainWindow(QMainWindow):
         self.app_version = get_app_version()
 
         self.setWindowTitle(get_window_title())
-        self.resize(880, 620)
+        self.resize(1180, 760)
+        self.setMinimumSize(1020, 680)
+        self.apply_window_style()
 
         root = QWidget(self)
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(0)
 
-        tool_group = QGroupBox("工具选择", self)
+        splitter = QSplitter(Qt.Horizontal, root)
+        splitter.setChildrenCollapsible(False)
+
+        left_scroll = QScrollArea(self)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+
+        left_content = QWidget(self)
+        left_scroll.setWidget(left_content)
+
+        left_layout = QVBoxLayout(left_content)
+        left_layout.setContentsMargins(0, 0, 10, 0)
+        left_layout.setSpacing(16)
+
+        tool_group = QGroupBox("工具概览", self)
         tool_layout = QGridLayout(tool_group)
-        tool_layout.setHorizontalSpacing(10)
-        tool_layout.setVerticalSpacing(10)
+        tool_layout.setContentsMargins(18, 18, 18, 18)
+        tool_layout.setHorizontalSpacing(12)
+        tool_layout.setVerticalSpacing(12)
 
         self.tool_combo = QComboBox(self)
+        self.tool_combo.setMinimumWidth(360)
         for tool in self.tool_specs:
             self.add_tool_combo_item(tool)
+
         self.load_tool_button = QPushButton("加载工具", self)
+        self.load_tool_button.setObjectName("toolManageButton")
         self.load_tool_button.clicked.connect(self.load_custom_tool)
         self.unload_tool_button = QPushButton("卸载工具", self)
+        self.unload_tool_button.setObjectName("toolManageButton")
         self.unload_tool_button.clicked.connect(self.unload_current_tool)
+        self.tool_summary = QLabel(self)
+        self.tool_summary.setObjectName("sectionHint")
+        self.tool_summary.setWordWrap(True)
+        self.tool_title = QLabel(self)
+        self.tool_title.setObjectName("toolTitle")
+        self.tool_title.setWordWrap(True)
+        self.tool_version_badge = QLabel(self)
+        self.tool_version_badge.setObjectName("toolBadge")
+        self.tool_source_badge = QLabel(self)
+        self.tool_source_badge.setObjectName("toolBadge")
         self.tool_description = QLabel(self)
         self.tool_description.setWordWrap(True)
+        self.tool_description.setObjectName("toolDescription")
         self.tool_description.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.tool_description.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.tool_description.setMinimumHeight(86)
 
-        tool_layout.addWidget(QLabel("工具", self), 0, 0)
-        tool_layout.addWidget(self.tool_combo, 0, 1)
-        tool_layout.addWidget(self.load_tool_button, 0, 2)
-        tool_layout.addWidget(self.unload_tool_button, 0, 3)
-        tool_layout.addWidget(QLabel("说明", self), 1, 0)
-        tool_layout.addWidget(self.tool_description, 1, 1, 1, 3)
+        manage_label = QLabel("工具管理", self)
+        manage_label.setObjectName("fieldHelp")
+
+        manage_panel = QWidget(self)
+        manage_layout = QHBoxLayout(manage_panel)
+        manage_layout.setContentsMargins(0, 0, 0, 0)
+        manage_layout.setSpacing(8)
+        manage_layout.addWidget(manage_label)
+        manage_layout.addStretch(1)
+        manage_layout.addWidget(self.load_tool_button)
+        manage_layout.addWidget(self.unload_tool_button)
+
+        meta_panel = QWidget(self)
+        meta_layout = QHBoxLayout(meta_panel)
+        meta_layout.setContentsMargins(0, 0, 0, 0)
+        meta_layout.setSpacing(8)
+        meta_layout.addWidget(self.tool_version_badge)
+        meta_layout.addWidget(self.tool_source_badge)
+        meta_layout.addStretch(1)
+
+        detail_panel = QWidget(self)
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.setSpacing(8)
+        detail_layout.addWidget(self.tool_title)
+        detail_layout.addWidget(meta_panel)
+        detail_layout.addWidget(self.tool_description)
+
+        tool_layout.addWidget(self.tool_summary, 0, 0, 1, 4)
+        tool_layout.addWidget(manage_panel, 1, 0, 1, 4)
+        tool_layout.addWidget(QLabel("当前工具", self), 2, 0)
+        tool_layout.addWidget(self.tool_combo, 2, 1, 1, 3)
+        tool_layout.addWidget(QLabel("工具详情", self), 3, 0, Qt.AlignTop)
+        tool_layout.addWidget(detail_panel, 3, 1, 1, 3)
 
         shared_group = QGroupBox("公共配置", self)
         self.shared_form_layout = QGridLayout(shared_group)
-        self.shared_form_layout.setHorizontalSpacing(10)
-        self.shared_form_layout.setVerticalSpacing(10)
+        self.shared_form_layout.setContentsMargins(18, 18, 18, 18)
+        self.shared_form_layout.setHorizontalSpacing(12)
+        self.shared_form_layout.setVerticalSpacing(12)
 
         tool_form_group = QGroupBox("工具专用配置", self)
         self.tool_form_layout = QGridLayout(tool_form_group)
-        self.tool_form_layout.setHorizontalSpacing(10)
-        self.tool_form_layout.setVerticalSpacing(10)
+        self.tool_form_layout.setContentsMargins(18, 18, 18, 18)
+        self.tool_form_layout.setHorizontalSpacing(12)
+        self.tool_form_layout.setVerticalSpacing(12)
+
+        left_layout.addWidget(tool_group)
+        left_layout.addWidget(shared_group)
+        left_layout.addWidget(tool_form_group)
+        left_layout.addStretch(1)
+
+        right_panel = QWidget(self)
+        right_panel.setObjectName("sidePanel")
+        right_panel.setMinimumWidth(360)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+        right_layout.setSpacing(16)
+
+        execution_group = QGroupBox("执行控制", self)
+        execution_layout = QVBoxLayout(execution_group)
+        execution_layout.setContentsMargins(18, 18, 18, 18)
+        execution_layout.setSpacing(14)
+
+        self.run_hint_label = QLabel("先在左侧完成工具选择与参数配置，再开始执行。", self)
+        self.run_hint_label.setObjectName("sectionHint")
+        self.run_hint_label.setWordWrap(True)
 
         actions = QHBoxLayout()
         actions.setSpacing(10)
         self.run_button = QPushButton("运行工具", self)
+        self.run_button.setObjectName("primaryButton")
         self.run_button.clicked.connect(self.start_tool)
         self.clear_log_button = QPushButton("清空日志", self)
         self.clear_log_button.clicked.connect(self.clear_log)
-        actions.addWidget(self.run_button)
+        actions.addWidget(self.run_button, 1)
         actions.addWidget(self.clear_log_button)
-        actions.addStretch(1)
 
         status_row = QHBoxLayout()
         status_row.setSpacing(10)
         self.status_label = QLabel("就绪", self)
-        self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.status_label.setObjectName("statusBadge")
+        self.status_label.setProperty("tone", "idle")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p%")
-        self.progress_bar.setFixedWidth(180)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        status_row.addWidget(self.status_label, 1)
-        status_row.addStretch(1)
-        status_row.addWidget(self.progress_bar)
+        status_row.addWidget(self.status_label)
+        status_row.addWidget(self.progress_bar, 1)
+
+        execution_layout.addWidget(self.run_hint_label)
+        execution_layout.addLayout(actions)
+        execution_layout.addLayout(status_row)
 
         log_group = QGroupBox("执行日志", self)
         log_layout = QVBoxLayout(log_group)
+        log_layout.setContentsMargins(18, 18, 18, 18)
+        log_layout.setSpacing(12)
+        log_hint = QLabel("执行过程、异常信息和结果反馈会持续写入这里。", self)
+        log_hint.setObjectName("sectionHint")
+        log_hint.setWordWrap(True)
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
         self.log_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.log_view.setPlaceholderText("执行日志会显示在这里。")
         self.log_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        log_layout.addWidget(self.log_view)
+        log_layout.addWidget(log_hint)
+        log_layout.addWidget(self.log_view, 1)
 
-        layout.addWidget(tool_group)
-        layout.addWidget(shared_group)
-        layout.addWidget(tool_form_group)
-        layout.addLayout(actions)
-        layout.addLayout(status_row)
-        layout.addWidget(log_group, 1)
+        right_layout.addWidget(execution_group)
+        right_layout.addWidget(log_group, 1)
+
+        splitter.addWidget(left_scroll)
+        splitter.addWidget(right_panel)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+
+        layout.addWidget(splitter, 1)
 
         self.tool_combo.currentIndexChanged.connect(self.on_tool_changed)
         self.rebuild_shared_parameter_form()
         self.restore_settings()
         self.on_tool_changed()
+
+    def apply_window_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow {
+                background: #f3f5f7;
+            }
+            QGroupBox {
+                background: #ffffff;
+                border: 1px solid #d7dde5;
+                border-radius: 14px;
+                font-weight: 600;
+                margin-top: 12px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 16px;
+                padding: 0 6px;
+                color: #243447;
+            }
+            QLabel {
+                color: #253342;
+            }
+            QLabel#sectionHint {
+                color: #607284;
+            }
+            QLabel#toolTitle {
+                color: #1f2f3d;
+                font-size: 18px;
+                font-weight: 700;
+            }
+            QLabel#toolBadge {
+                color: #506273;
+                font-size: 12px;
+                background: #f2f5f8;
+                border: 1px solid #e0e6ed;
+                border-radius: 999px;
+                padding: 4px 10px;
+                font-weight: 600;
+            }
+            QLabel#toolDescription {
+                background: #f7f9fb;
+                border: 1px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 10px 12px;
+                color: #33485c;
+            }
+            QLabel#statusBadge {
+                border-radius: 999px;
+                padding: 6px 14px;
+                font-weight: 600;
+                min-width: 72px;
+            }
+            QLabel#statusBadge[tone="idle"] {
+                background: #e8edf2;
+                color: #415466;
+            }
+            QLabel#statusBadge[tone="running"] {
+                background: #dff3ea;
+                color: #1f6a49;
+            }
+            QLabel#statusBadge[tone="success"] {
+                background: #deefff;
+                color: #16507b;
+            }
+            QLabel#statusBadge[tone="error"] {
+                background: #fde8e8;
+                color: #9a2d2d;
+            }
+            QLabel#fieldHelp {
+                color: #6b7c8e;
+                font-size: 12px;
+            }
+            QLabel#emptyStateLabel {
+                color: #5f7285;
+                background: #f7f9fb;
+                border: 1px dashed #cfd8e3;
+                border-radius: 10px;
+                padding: 12px;
+            }
+            QLineEdit,
+            QComboBox,
+            QPlainTextEdit {
+                background: #ffffff;
+                border: 1px solid #c9d3dd;
+                border-radius: 10px;
+                padding: 8px 10px;
+                selection-background-color: #bfd8f2;
+            }
+            QLineEdit:focus,
+            QComboBox:focus,
+            QPlainTextEdit:focus {
+                border: 1px solid #4e8ccf;
+            }
+            QPushButton {
+                background: #edf1f5;
+                color: #243447;
+                border: 1px solid #d0d8e1;
+                border-radius: 10px;
+                padding: 9px 14px;
+            }
+            QPushButton:hover {
+                background: #e3eaf1;
+            }
+            QPushButton:disabled {
+                color: #8a98a8;
+                background: #f3f5f7;
+            }
+            QPushButton#primaryButton {
+                background: #1f6fb2;
+                color: #ffffff;
+                border: 1px solid #185a91;
+                font-weight: 600;
+                min-height: 38px;
+            }
+            QPushButton#primaryButton:hover {
+                background: #185f99;
+            }
+            QPushButton#toolManageButton {
+                padding: 7px 12px;
+                min-height: 0px;
+            }
+            QProgressBar {
+                min-height: 12px;
+                border-radius: 6px;
+                background: #e9edf2;
+                border: 1px solid #d7dde5;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background: #2f88d6;
+            }
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            """
+        )
+
+    def refresh_status_badge(self, text: str, tone: str) -> None:
+        self.status_label.setText(text)
+        self.status_label.setProperty("tone", tone)
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+
+    def parameter_placeholder_text(self, parameter: ParameterSpec) -> str:
+        if parameter.example_hint:
+            return parameter.example_hint
+        if parameter.default_output_name:
+            return f"默认自动生成 {parameter.default_output_name}"
+        if parameter.browse_mode == "project_path":
+            return "选择 .wbpj 文件或可定位到 IcepakProj 的目录"
+        if parameter.browse_mode == "save_file":
+            return "选择导出文件路径"
+        if parameter.browse_mode == "open_file":
+            return "选择文件路径"
+        return "请输入参数值"
+
+    def parameter_help_text(self, parameter: ParameterSpec) -> str:
+        parts: list[str] = []
+        parts.append("必填" if parameter.required else "选填")
+        if parameter.example_hint:
+            parts.append(f"示例：{parameter.example_hint}")
+        elif parameter.default_output_name:
+            parts.append(f"会按测试用例路径自动补全为 {parameter.default_output_name}")
+        elif parameter.default_value:
+            parts.append(f"默认值：{self.default_parameter_value(parameter)}")
+        return " | ".join(parts)
 
     def _add_browse_row(
         self,
@@ -211,19 +482,38 @@ class MainWindow(QMainWindow):
         parameter: ParameterSpec,
         value: str,
     ) -> None:
-        label_text = parameter.label
+        label_text = parameter.label + (" *" if parameter.required else "")
 
         label = QLabel(label_text, self)
+        label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
         line_edit = QLineEdit(value, self)
+        line_edit.setClearButtonEnabled(True)
+        line_edit.setPlaceholderText(self.parameter_placeholder_text(parameter))
+
+        field_container = QWidget(self)
+        field_layout = QVBoxLayout(field_container)
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(4)
+
+        field_help = QLabel(self.parameter_help_text(parameter), self)
+        field_help.setObjectName("fieldHelp")
+        field_help.setWordWrap(True)
+
+        field_layout.addWidget(line_edit)
+        field_layout.addWidget(field_help)
+
         browse_button = QPushButton("浏览", self)
         browse_button.clicked.connect(
             lambda _checked=False, key=parameter.key: self.browse_parameter(key)
         )
         if parameter.browse_mode == "none":
             browse_button.setEnabled(False)
+
         layout.addWidget(label, row, 0)
-        layout.addWidget(line_edit, row, 1)
-        layout.addWidget(browse_button, row, 2)
+        layout.addWidget(field_container, row, 1)
+        layout.addWidget(browse_button, row, 2, Qt.AlignTop)
+
         widgets[parameter.key] = line_edit
         specs[parameter.key] = parameter
         line_edit.textChanged.connect(self.save_settings)
@@ -285,17 +575,18 @@ class MainWindow(QMainWindow):
         saved_tool_id = self.settings.value("ui/current_tool_id", "", type=str)
         if not saved_tool_id:
             saved_tool_id = self.settings.value("ui/current_tool_key", "", type=str)
+
         tool_index = self.tool_combo.findData(saved_tool_id)
         if tool_index < 0:
             saved_tool = self.find_tool_by_saved_id(saved_tool_id)
             if saved_tool is not None:
                 tool_index = self.tool_combo.findData(saved_tool.identifier)
+
         if not self.tool_specs:
             self.tool_description.setText("未发现可用工具。")
             self.run_button.setEnabled(False)
             self.unload_tool_button.setEnabled(False)
             return
-
         if tool_index >= 0:
             self.tool_combo.setCurrentIndex(tool_index)
         else:
@@ -366,14 +657,27 @@ class MainWindow(QMainWindow):
 
     def on_tool_changed(self) -> None:
         if not self.tool_specs:
+            self.tool_title.setText("未发现可用工具")
+            self.tool_version_badge.clear()
+            self.tool_source_badge.clear()
             self.tool_description.setText("未发现可用工具。")
+            self.tool_summary.setText("当前工作区没有可用工具，无法开始执行。")
+            self.run_hint_label.setText("请先加载一个工具压缩包，或在工作区内添加内置工具目录。")
             self.run_button.setEnabled(False)
             self.unload_tool_button.setEnabled(False)
             self.load_tool_button.setEnabled(self.thread is None)
             return
 
         tool = self.current_tool()
-        self.tool_description.setText(f"版本：v{tool.version}\n{tool.description}")
+        source_label = "内置工具" if tool.is_builtin else "自定义工具"
+        self.tool_summary.setText(
+            f"当前已发现 {len(self.tool_specs)} 个工具。先选择工具，再检查参数，最后在右侧执行并查看日志。"
+        )
+        self.tool_title.setText(tool.name)
+        self.tool_version_badge.setText(f"版本 v{tool.version}")
+        self.tool_source_badge.setText(source_label)
+        self.tool_description.setText(tool.description)
+        self.run_hint_label.setText(f"当前操作：{tool.run_button_text}。完成左侧配置后，可直接在这里执行。")
         self.run_button.setText(tool.run_button_text)
         self.rebuild_parameter_form(tool)
         self.restore_tool_parameter_values(tool)
@@ -431,6 +735,13 @@ class MainWindow(QMainWindow):
 
         self.tool_parameter_widgets = {}
         self.tool_parameter_specs = {}
+
+        if not tool.parameters:
+            empty_label = QLabel("当前工具没有额外配置项，确认公共配置无误后即可运行。", self)
+            empty_label.setObjectName("emptyStateLabel")
+            empty_label.setWordWrap(True)
+            self.tool_form_layout.addWidget(empty_label, 0, 0, 1, 3)
+            return
 
         for row, parameter in enumerate(tool.parameters):
             self._add_browse_row(
@@ -596,9 +907,10 @@ class MainWindow(QMainWindow):
         self.load_tool_button.setEnabled(not running)
         self.unload_tool_button.setEnabled((not running) and (not self.current_tool().is_builtin))
         if running:
-            self.status_label.setText("运行中...")
+            self.refresh_status_badge("运行中", "running")
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setFormat("")
+            self.run_hint_label.setText("工具正在执行，日志会持续更新。")
 
     def load_custom_tool(self) -> None:
         if self.thread is not None:
@@ -668,13 +980,13 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "卸载成功", f"已卸载工具：{removed_tool_name}")
 
     def reset_progress_display(self, status_text: str) -> None:
-        self.status_label.setText(status_text)
+        self.refresh_status_badge(status_text, "idle")
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("%p%")
 
     def complete_progress_display(self, status_text: str) -> None:
-        self.status_label.setText(status_text)
+        self.refresh_status_badge(status_text, "success")
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(100)
         self.progress_bar.setFormat("%p%")
@@ -749,12 +1061,16 @@ class MainWindow(QMainWindow):
 
         self.run_button.setEnabled(True)
         self.reset_progress_display(f"执行失败，退出码 {result.exit_code}")
+        self.refresh_status_badge("执行失败", "error")
         self.append_log(f"工具执行失败，退出码 {result.exit_code}。")
         QMessageBox.critical(self, "失败", f"工具执行失败，退出码 {result.exit_code}。")
 
     def on_failed(self, message: str) -> None:
         self.run_button.setEnabled(True)
-        self.reset_progress_display("失败")
+        self.refresh_status_badge("失败", "error")
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")
         self.append_log(f"错误：{message}")
         QMessageBox.critical(self, "错误", message)
 
