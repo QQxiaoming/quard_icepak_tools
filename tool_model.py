@@ -64,6 +64,10 @@ class ToolSpec:
     source_path: str = ""
     is_builtin: bool = True
 
+    @property
+    def identifier(self) -> str:
+        return f"{self.key}@{self.version}"
+
     def parameter(self, key: str) -> ParameterSpec | None:
         for parameter in self.parameters:
             if parameter.key == key:

@@ -172,8 +172,8 @@ def _validate_unique_tool_key(candidate: ToolSpec, destination_dir: Path | None 
     for tool in discover_tools():
         if destination_dir is not None and tool.source_path == str(destination_dir):
             continue
-        if tool.key == candidate.key:
-            raise ValueError(f"工具 key 冲突：{candidate.key}")
+        if tool.identifier == candidate.identifier:
+            raise ValueError(f"工具 key/version 冲突：{candidate.identifier}")
 
 
 def _sanitize_tool_dir_name(name: str) -> str:
@@ -311,8 +311,11 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
 )
 
 
-def get_tool(tool_key: str) -> ToolSpec:
+def get_tool(tool_id: str) -> ToolSpec:
     for tool in TOOLS:
-        if tool.key == tool_key:
+        if tool.identifier == tool_id:
             return tool
-    raise KeyError(f"Unknown tool: {tool_key}")
+    matches = [tool for tool in TOOLS if tool.key == tool_id]
+    if len(matches) == 1:
+        return matches[0]
+    raise KeyError(f"Unknown tool: {tool_id}")

@@ -200,6 +200,7 @@ class MainWindow(QMainWindow):
         self.tool_combo.currentIndexChanged.connect(self.on_tool_changed)
         self.rebuild_shared_parameter_form()
         self.restore_settings()
+        self.on_tool_changed()
 
     def _add_browse_row(
         self,
@@ -233,8 +234,22 @@ class MainWindow(QMainWindow):
     def shared_setting_key(self, parameter_key: str) -> str:
         return f"shared/{parameter_key}"
 
-    def tool_setting_key(self, tool_key: str, parameter_key: str) -> str:
-        return f"tools/{tool_key}/{parameter_key}"
+    def tool_setting_key(self, tool_id: str, parameter_key: str) -> str:
+        return f"tools/{tool_id}/{parameter_key}"
+
+    def find_tool_by_saved_id(self, saved_tool_id: str) -> ToolSpec | None:
+        if not saved_tool_id:
+            return None
+
+        for tool in self.tool_specs:
+            if tool.identifier == saved_tool_id:
+                return tool
+
+        matches = [tool for tool in self.tool_specs if tool.key == saved_tool_id]
+        if len(matches) == 1:
+            return matches[0]
+
+        return None
 
     def saved_shared_value(self, parameter: ParameterSpec) -> str:
         saved_value = self.settings.value(self.shared_setting_key(parameter.key), "", type=str)
@@ -242,10 +257,16 @@ class MainWindow(QMainWindow):
 
     def saved_tool_value(self, tool: ToolSpec, parameter: ParameterSpec) -> str:
         saved_value = self.settings.value(
-            self.tool_setting_key(tool.key, parameter.key),
+            self.tool_setting_key(tool.identifier, parameter.key),
             "",
             type=str,
         )
+        if not saved_value:
+            saved_value = self.settings.value(
+                self.tool_setting_key(tool.key, parameter.key),
+                "",
+                type=str,
+            )
         return saved_value or self.default_parameter_value(parameter)
 
     def restore_settings(self) -> None:
@@ -257,8 +278,14 @@ class MainWindow(QMainWindow):
                 continue
             widget.setText(self.saved_shared_value(parameter))
 
-        saved_tool_key = self.settings.value("ui/current_tool_key", "", type=str)
-        tool_index = self.tool_combo.findData(saved_tool_key)
+        saved_tool_id = self.settings.value("ui/current_tool_id", "", type=str)
+        if not saved_tool_id:
+            saved_tool_id = self.settings.value("ui/current_tool_key", "", type=str)
+        tool_index = self.tool_combo.findData(saved_tool_id)
+        if tool_index < 0:
+            saved_tool = self.find_tool_by_saved_id(saved_tool_id)
+            if saved_tool is not None:
+                tool_index = self.tool_combo.findData(saved_tool.identifier)
         if not self.tool_specs:
             self.tool_description.setText("未发现可用工具。")
             self.run_button.setEnabled(False)
@@ -291,7 +318,7 @@ class MainWindow(QMainWindow):
         return f"{tool.name} v{tool.version} [{source_label}]"
 
     def add_tool_combo_item(self, tool: ToolSpec) -> None:
-        self.tool_combo.addItem(self.tool_display_name(tool), tool.key)
+        self.tool_combo.addItem(self.tool_display_name(tool), tool.identifier)
         item_index = self.tool_combo.count() - 1
         tooltip_lines = [f"版本：v{tool.version}", tool.description]
         if not tool.is_builtin and tool.source_path:
@@ -302,11 +329,13 @@ class MainWindow(QMainWindow):
         tooltip = "\n".join(tooltip_lines)
         self.tool_combo.setItemData(item_index, tooltip, Qt.ToolTipRole)
 
-    def reload_tool_specs(self, preferred_tool_key: str | None = None) -> None:
+    def reload_tool_specs(self, preferred_tool_id: str | None = None) -> None:
         if self.thread is not None:
             return
 
-        selected_tool_key = preferred_tool_key or self.settings.value("ui/current_tool_key", "", type=str)
+        selected_tool_id = preferred_tool_id or self.settings.value("ui/current_tool_id", "", type=str)
+        if not selected_tool_id:
+            selected_tool_id = self.settings.value("ui/current_tool_key", "", type=str)
         self.tool_specs = discover_tools()
 
         self.tool_combo.blockSignals(True)
@@ -321,7 +350,11 @@ class MainWindow(QMainWindow):
             self.run_button.setEnabled(False)
             return
 
-        selected_index = self.tool_combo.findData(selected_tool_key)
+        selected_index = self.tool_combo.findData(selected_tool_id)
+        if selected_index < 0:
+            selected_tool = self.find_tool_by_saved_id(selected_tool_id)
+            if selected_tool is not None:
+                selected_index = self.tool_combo.findData(selected_tool.identifier)
         if selected_index < 0:
             selected_index = 0
         self.tool_combo.setCurrentIndex(selected_index)
@@ -448,11 +481,12 @@ class MainWindow(QMainWindow):
 
         if self.tool_specs:
             current_tool = self.current_tool()
+            self.settings.setValue("ui/current_tool_id", current_tool.identifier)
             self.settings.setValue("ui/current_tool_key", current_tool.key)
 
             for key, widget in self.tool_parameter_widgets.items():
                 self.settings.setValue(
-                    self.tool_setting_key(current_tool.key, key),
+                    self.tool_setting_key(current_tool.identifier, key),
                     widget.text().strip(),
                 )
 
@@ -590,7 +624,7 @@ class MainWindow(QMainWindow):
             return
 
         self.append_log(f"已加载用户工具：{tool.name}")
-        self.reload_tool_specs(preferred_tool_key=tool.key)
+        self.reload_tool_specs(preferred_tool_id=tool.identifier)
         QMessageBox.information(self, "加载成功", f"已加载工具：{tool.name}")
 
     def unload_current_tool(self) -> None:
@@ -611,6 +645,7 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
+        removed_tool_id = tool.identifier
         removed_tool_key = tool.key
         removed_tool_name = tool.name
         try:
@@ -619,7 +654,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "卸载失败", str(exc))
             return
 
-        self.settings.remove(f"tools/{removed_tool_key}")
+        self.settings.remove(f"tools/{removed_tool_id}")
+        if self.settings.value("ui/current_tool_id", "", type=str) == removed_tool_id:
+            self.settings.remove("ui/current_tool_id")
         if self.settings.value("ui/current_tool_key", "", type=str) == removed_tool_key:
             self.settings.remove("ui/current_tool_key")
         self.append_log(f"已卸载用户工具：{removed_tool_name}")
