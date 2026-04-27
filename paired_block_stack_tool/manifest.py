@@ -2,7 +2,7 @@ from tool_model import ParameterSpec, ToolSpec
 
 from .result_dialog import show_paired_block_dz_result
 from .tool import DEFAULT_LIST_TCL_SCRIPT, list_block_dimensions
-
+from .tool_version import TOOL_VERSION
 
 def execute_paired_block_dz(parameters: dict[str, str], log=None, progress=None):
     return list_block_dimensions(
@@ -18,6 +18,7 @@ def execute_paired_block_dz(parameters: dict[str, str], log=None, progress=None)
 TOOL_SPEC = ToolSpec(
     key="paired_block_thickness_adjustment",
     name="配对 Hexa Block 厚度调整工具",
+    version=TOOL_VERSION,
     description=(
         "枚举所有 hexa block，选择一个块后在独立对话框中按厚度堆叠方向的正向或反向调整厚度，"
         "并让相邻且截面范围完全一致的另一个 hexa block 做反向变化。"

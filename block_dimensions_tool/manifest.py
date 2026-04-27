@@ -2,7 +2,7 @@ from tool_model import ToolSpec
 
 from .result_dialog import show_block_dimensions_result
 from .tool import DEFAULT_TCL_SCRIPT, export_block_dimensions
-
+from .tool_version import TOOL_VERSION
 
 def execute_block_dimensions(parameters: dict[str, str], log=None, progress=None) -> int:
     return export_block_dimensions(
@@ -18,6 +18,7 @@ def execute_block_dimensions(parameters: dict[str, str], log=None, progress=None
 TOOL_SPEC = ToolSpec(
     key="block_dimensions_csv",
     name="Block 尺寸统计工具",
+    version=TOOL_VERSION,
     description=(
         "加载 Classic Icepak 工程，并在界面中显示各个 block 的尺寸和包围盒坐标。"
     ),

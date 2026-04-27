@@ -2,11 +2,12 @@ from tool_model import ParameterSpec, ToolSpec
 from tool_success_handlers import show_default_success_message
 
 from .tool import DEFAULT_TCL_SCRIPT, run_example_tool
-
+from .tool_version import TOOL_VERSION
 
 TOOL_SPEC = ToolSpec(
     key="example_template",
     name="示例工具",
+    version=TOOL_VERSION,
     description=(
         "这是一个尽量简单的示例工具。"
         "它只收集少量参数，用来演示如何新增工具。"

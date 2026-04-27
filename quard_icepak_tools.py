@@ -288,18 +288,18 @@ class MainWindow(QMainWindow):
 
     def tool_display_name(self, tool: ToolSpec) -> str:
         source_label = "内置" if tool.is_builtin else "自定义"
-        return f"{tool.name} [{source_label}]"
+        return f"{tool.name} v{tool.version} [{source_label}]"
 
     def add_tool_combo_item(self, tool: ToolSpec) -> None:
         self.tool_combo.addItem(self.tool_display_name(tool), tool.key)
         item_index = self.tool_combo.count() - 1
-        tooltip = tool.description
+        tooltip_lines = [f"版本：v{tool.version}", tool.description]
         if not tool.is_builtin and tool.source_path:
-            tooltip_lines = [tool.description, f"来源：{tool.source_path}"]
+            tooltip_lines.append(f"来源：{tool.source_path}")
             tcl_script = tool.internal_parameters.get("tcl_script", "").strip()
             if tcl_script:
                 tooltip_lines.append(f"Tcl 路径：{Path(tcl_script).expanduser().resolve()}")
-            tooltip = "\n".join(tooltip_lines)
+        tooltip = "\n".join(tooltip_lines)
         self.tool_combo.setItemData(item_index, tooltip, Qt.ToolTipRole)
 
     def reload_tool_specs(self, preferred_tool_key: str | None = None) -> None:
@@ -336,7 +336,7 @@ class MainWindow(QMainWindow):
             return
 
         tool = self.current_tool()
-        self.tool_description.setText(tool.description)
+        self.tool_description.setText(f"版本：v{tool.version}\n{tool.description}")
         self.run_button.setText(tool.run_button_text)
         self.rebuild_parameter_form(tool)
         self.restore_tool_parameter_values(tool)

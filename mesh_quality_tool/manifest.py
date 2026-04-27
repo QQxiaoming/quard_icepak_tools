@@ -2,7 +2,7 @@ from tool_model import ToolSpec
 
 from .result_dialog import show_mesh_quality_result
 from .tool import DEFAULT_TCL_SCRIPT, generate_mesh_quality_report
-
+from .tool_version import TOOL_VERSION
 
 def execute_mesh_quality(parameters: dict[str, str], log=None, progress=None):
     return generate_mesh_quality_report(
@@ -18,6 +18,7 @@ def execute_mesh_quality(parameters: dict[str, str], log=None, progress=None):
 TOOL_SPEC = ToolSpec(
     key="mesh_generation_quality",
     name="网格生成与质量评估工具",
+    version=TOOL_VERSION,
     description=(
         "调用 Classic Icepak 生成网格，等待网格完成后统计几项常用网格质量指标，"
         "并在结果窗口中展示最小值与最大值。"

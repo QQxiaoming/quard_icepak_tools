@@ -54,6 +54,7 @@ class ParameterSpec:
 class ToolSpec:
     key: str
     name: str
+    version: str
     description: str
     run_button_text: str
     parameters: tuple[ParameterSpec, ...]
