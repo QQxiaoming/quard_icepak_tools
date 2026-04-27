@@ -29,6 +29,7 @@ from ui_components import (
     ModernDoubleSpinBox,
     ToggleSwitch,
     apply_dialog_chrome,
+    theme_colors,
 )
 
 from .tool import (
@@ -42,6 +43,56 @@ from .tool import (
 
 
 HIDDEN_COLUMNS = {"object_type", "shape_name"}
+
+
+def _uses_dark_theme(widget: QWidget) -> bool:
+    return QColor(theme_colors(widget).window).lightnessF() < 0.5
+
+
+def _selected_block_color(widget: QWidget) -> QColor:
+    return QColor(theme_colors(widget).accent)
+
+
+def _partner_block_color(widget: QWidget) -> QColor:
+    return QColor("#ff8a80") if _uses_dark_theme(widget) else QColor("#c62828")
+
+
+def _other_block_color(widget: QWidget) -> QColor:
+    return QColor("#94a3b8") if _uses_dark_theme(widget) else QColor("#90a4ae")
+
+
+def _preview_background_color(widget: QWidget) -> QColor:
+    return QColor(theme_colors(widget).surface_alt)
+
+
+def _preview_text_color(widget: QWidget) -> QColor:
+    return QColor(theme_colors(widget).text_soft)
+
+
+def _legend_text_color(widget: QWidget) -> QColor:
+    return QColor(theme_colors(widget).text_muted)
+
+
+def _axis_x_color(widget: QWidget) -> QColor:
+    return QColor("#ff8a80") if _uses_dark_theme(widget) else QColor("#d32f2f")
+
+
+def _axis_y_color(widget: QWidget) -> QColor:
+    return QColor("#7bd88f") if _uses_dark_theme(widget) else QColor("#2e7d32")
+
+
+def _axis_z_color(widget: QWidget) -> QColor:
+    return _selected_block_color(widget)
+
+
+def _axis_origin_color(widget: QWidget) -> QColor:
+    return QColor(theme_colors(widget).text_muted)
+
+
+def _with_alpha(color: QColor, alpha: int) -> QColor:
+    tinted = QColor(color)
+    tinted.setAlpha(alpha)
+    return tinted
 
 
 def build_visible_table_data(table_data: TableData) -> TableData:
@@ -125,16 +176,16 @@ class BlockModelPreviewWidget(QWidget):
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.fillRect(self.rect(), QColor("#f7f9fc"))
+        painter.fillRect(self.rect(), _preview_background_color(self))
 
         if not self.records:
-            painter.setPen(QColor("#5f6b7a"))
+            painter.setPen(_preview_text_color(self))
             painter.drawText(self.rect(), Qt.AlignCenter, "暂无可预览的 3D 模型")
             return
 
         visible_records = self._visible_records()
         if not visible_records:
-            painter.setPen(QColor("#5f6b7a"))
+            painter.setPen(_preview_text_color(self))
             painter.drawText(self.rect(), Qt.AlignCenter, "当前筛选条件下没有可预览的 block")
             return
 
@@ -172,13 +223,13 @@ class BlockModelPreviewWidget(QWidget):
         for record, projected in projected_blocks:
             mapped_points = [map_point(point) for point, _depth in projected]
             if record.object_name == self.selected_name:
-                color = QColor("#1565c0")
+                color = _selected_block_color(self)
                 width = 2.4
             elif record.object_name == self.partner_name:
-                color = QColor("#c62828")
+                color = _partner_block_color(self)
                 width = 2.4
             else:
-                color = QColor("#90a4ae")
+                color = _other_block_color(self)
                 width = 1.2
 
             self._draw_faces(painter, record.object_name, mapped_points, projected)
@@ -282,15 +333,15 @@ class BlockModelPreviewWidget(QWidget):
 
     def _draw_legend(self, painter: QPainter) -> None:
         entries = [
-            (QColor("#1565c0"), "当前选中 block"),
-            (QColor("#c62828"), "配对 block"),
-            (QColor("#90a4ae"), "其他 block"),
+            (_selected_block_color(self), "当前选中 block"),
+            (_partner_block_color(self), "配对 block"),
+            (_other_block_color(self), "其他 block"),
         ]
         x = 18
         y = 18
         for color, label in entries:
             painter.fillRect(x, y, 12, 12, color)
-            painter.setPen(QColor("#334155"))
+            painter.setPen(_legend_text_color(self))
             painter.drawText(x + 18, y - 1, 120, 16, Qt.AlignLeft | Qt.AlignVCenter, label)
             y += 20
 
@@ -355,9 +406,9 @@ class BlockModelPreviewWidget(QWidget):
             return
 
         if object_name == self.selected_name:
-            fill_color = QColor(21, 101, 192, 70)
+            fill_color = _with_alpha(_selected_block_color(self), 70)
         elif object_name == self.partner_name:
-            fill_color = QColor(198, 40, 40, 70)
+            fill_color = _with_alpha(_partner_block_color(self), 70)
         else:
             return
 
@@ -404,9 +455,9 @@ class BlockModelPreviewWidget(QWidget):
         origin = QPointF(30.0, self.height() - 30.0)
         axis_length = 24.0
         axis_specs = (
-            ("X", QColor("#d32f2f"), self._project_direction(1.0, 0.0, 0.0)),
-            ("Y", QColor("#2e7d32"), self._project_direction(0.0, 1.0, 0.0)),
-            ("Z", QColor("#1565c0"), self._project_direction(0.0, 0.0, 1.0)),
+            ("X", _axis_x_color(self), self._project_direction(1.0, 0.0, 0.0)),
+            ("Y", _axis_y_color(self), self._project_direction(0.0, 1.0, 0.0)),
+            ("Z", _axis_z_color(self), self._project_direction(0.0, 0.0, 1.0)),
         )
 
         painter.save()
@@ -425,7 +476,7 @@ class BlockModelPreviewWidget(QWidget):
             painter.setPen(QPen(color, 1.0))
             painter.drawText(QRectF(end_point.x() + 3.0, end_point.y() - 8.0, 14.0, 14.0), Qt.AlignLeft | Qt.AlignVCenter, label)
 
-        painter.setBrush(QBrush(QColor("#475569")))
+        painter.setBrush(QBrush(_axis_origin_color(self)))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(origin, 2.2, 2.2)
         painter.restore()
@@ -663,8 +714,9 @@ class PairedBlockThicknessResultDialog(QDialog):
 
     def _apply_row_highlights(self) -> None:
         partner_name = self.highlighted_partner_name
-        highlight_foreground = QBrush(QColor("#ffffff"))
-        highlight_background = QBrush(QColor("#c62828"))
+        colors = theme_colors(self.result_table)
+        highlight_foreground = QBrush(QColor(colors.accent_text))
+        highlight_background = QBrush(_partner_block_color(self.result_table))
         default_foreground = QBrush()
         default_background = QBrush()
 

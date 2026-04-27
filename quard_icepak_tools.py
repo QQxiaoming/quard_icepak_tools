@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, QSize, QThread, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractSpinBox,
@@ -53,6 +54,14 @@ from tool_model import (
     ToolSpec,
     build_output_path,
 )
+from ui_components import (
+    install_theme_styles,
+    themed_focus_color,
+    themed_glyph_color,
+    themed_text_color,
+    themed_toggle_colors,
+    window_style_sheet,
+)
 
 
 @dataclass
@@ -87,16 +96,11 @@ class ToggleSwitch(QCheckBox):
         track_rect = rect.adjusted(rect.width() - track_width, (rect.height() - track_height) // 2, 0, -(rect.height() - track_height) // 2)
         text_rect = rect.adjusted(0, 0, -(track_width + spacing), 0)
 
-        text_color = QColor("#41586d") if self.isEnabled() else QColor("#9aa8b6")
+        text_color = themed_text_color(self, self.isEnabled(), muted=True)
         painter.setPen(text_color)
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, self.text())
 
-        if self.isChecked():
-            track_color = QColor("#2b7fc9") if self.isEnabled() else QColor("#9dc1e2")
-            border_color = QColor("#236ba8") if self.isEnabled() else QColor("#89afcf")
-        else:
-            track_color = QColor("#dde5ed") if self.isEnabled() else QColor("#edf1f5")
-            border_color = QColor("#c7d1db") if self.isEnabled() else QColor("#dde4eb")
+        track_color, border_color = themed_toggle_colors(self, self.isChecked(), self.isEnabled())
 
         painter.setPen(QPen(border_color, 1))
         painter.setBrush(track_color)
@@ -114,7 +118,7 @@ class ToggleSwitch(QCheckBox):
         painter.drawEllipse(knob_rect)
 
         if self.hasFocus():
-            focus_pen = QPen(QColor("#8cb9e6"), 2)
+            focus_pen = QPen(themed_focus_color(self), 2)
             painter.setPen(focus_pen)
             painter.setBrush(Qt.NoBrush)
             painter.drawRoundedRect(track_rect.adjusted(-2, -2, 2, 2), (track_height + 4) / 2, (track_height + 4) / 2)
@@ -132,7 +136,7 @@ class ModernComboBox(QComboBox):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        color = QColor("#4a6782") if self.isEnabled() else QColor("#a0adba")
+        color = themed_glyph_color(self, self.isEnabled())
         pen = QPen(color, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         painter.setPen(pen)
 
@@ -160,7 +164,7 @@ class _ModernSpinBoxMixin:
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        color = QColor("#4a6782") if self.isEnabled() else QColor("#a0adba")
+        color = themed_glyph_color(self, self.isEnabled())
         pen = QPen(color, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         painter.setPen(pen)
 
@@ -620,274 +624,7 @@ class MainWindow(QMainWindow):
         self.on_tool_changed()
 
     def apply_window_style(self) -> None:
-        self.setStyleSheet(
-            """
-            QMainWindow {
-                background: #f3f5f7;
-            }
-            QGroupBox {
-                background: #ffffff;
-                border: 1px solid #d7dde5;
-                border-radius: 14px;
-                font-weight: 600;
-                margin-top: 12px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 16px;
-                padding: 0 6px;
-                color: #243447;
-            }
-            QLabel {
-                color: #253342;
-            }
-            QLabel#sectionHint {
-                color: #607284;
-            }
-            QLabel#toolTitle {
-                color: #1f2f3d;
-                font-size: 18px;
-                font-weight: 700;
-            }
-            QLabel#toolBadge {
-                color: #506273;
-                font-size: 12px;
-                background: #f2f5f8;
-                border: 1px solid #e0e6ed;
-                border-radius: 999px;
-                padding: 4px 10px;
-                font-weight: 600;
-            }
-            QLabel#toolDescription {
-                background: #f7f9fb;
-                border: 1px solid #e0e6ed;
-                border-radius: 10px;
-                padding: 10px 12px;
-                color: #33485c;
-            }
-            QLabel#statusBadge {
-                border-radius: 999px;
-                padding: 6px 14px;
-                font-weight: 600;
-                min-width: 72px;
-            }
-            QLabel#statusBadge[tone="idle"] {
-                background: #e8edf2;
-                color: #415466;
-            }
-            QLabel#statusBadge[tone="running"] {
-                background: #dff3ea;
-                color: #1f6a49;
-            }
-            QLabel#statusBadge[tone="success"] {
-                background: #deefff;
-                color: #16507b;
-            }
-            QLabel#statusBadge[tone="error"] {
-                background: #fde8e8;
-                color: #9a2d2d;
-            }
-            QLabel#fieldHelp {
-                color: #6b7c8e;
-                font-size: 12px;
-            }
-            QLabel#parameterTitle {
-                color: #203140;
-                font-size: 13px;
-                font-weight: 700;
-            }
-            QLabel#parameterMeta {
-                color: #7a8c9d;
-                font-size: 11px;
-            }
-            QLabel#emptyStateLabel {
-                color: #5f7285;
-                background: #f7f9fb;
-                border: 1px dashed #cfd8e3;
-                border-radius: 10px;
-                padding: 12px;
-            }
-            QFrame#parameterRow {
-                background: #f8fafc;
-                border: 1px solid #dde5ee;
-                border-radius: 14px;
-            }
-            QWidget#parameterTitlePanel {
-                background: #eef3f8;
-                border-right: 1px solid #dde5ee;
-                border-top-left-radius: 13px;
-                border-bottom-left-radius: 13px;
-            }
-            QLineEdit,
-            QComboBox,
-            QSpinBox,
-            QDoubleSpinBox,
-            QPlainTextEdit {
-                background: #ffffff;
-                border: 1px solid #c9d3dd;
-                border-radius: 10px;
-                padding: 8px 10px;
-                selection-background-color: #bfd8f2;
-            }
-            QLineEdit:focus,
-            QComboBox:focus,
-            QSpinBox:focus,
-            QDoubleSpinBox:focus,
-            QPlainTextEdit:focus {
-                border: 1px solid #4e8ccf;
-            }
-            QComboBox {
-                padding: 8px 40px 8px 12px;
-                font-weight: 600;
-                color: #24384a;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f8fbfe);
-            }
-            QComboBox:hover {
-                border: 1px solid #9cb9d6;
-                background: #ffffff;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 34px;
-                border-left: 1px solid #d7e0e8;
-                background: #eef4fa;
-                border-top-right-radius: 10px;
-                border-bottom-right-radius: 10px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-            }
-            QComboBox:on {
-                background: #ffffff;
-            }
-            QSpinBox,
-            QDoubleSpinBox {
-                padding: 8px 38px 8px 12px;
-                font-weight: 600;
-                color: #24384a;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f8fbfe);
-            }
-            QSpinBox:hover,
-            QDoubleSpinBox:hover {
-                border: 1px solid #9cb9d6;
-                background: #ffffff;
-            }
-            QSpinBox::up-button,
-            QDoubleSpinBox::up-button {
-                subcontrol-origin: border;
-                subcontrol-position: top right;
-                width: 28px;
-                border-left: 1px solid #d7e0e8;
-                border-bottom: 1px solid #d7e0e8;
-                background: #eef4fa;
-                border-top-right-radius: 10px;
-            }
-            QSpinBox::down-button,
-            QDoubleSpinBox::down-button {
-                subcontrol-origin: border;
-                subcontrol-position: bottom right;
-                width: 28px;
-                border-left: 1px solid #d7e0e8;
-                background: #eef4fa;
-                border-bottom-right-radius: 10px;
-            }
-            QSpinBox::up-button:hover,
-            QDoubleSpinBox::up-button:hover,
-            QSpinBox::down-button:hover,
-            QDoubleSpinBox::down-button:hover {
-                background: #e2edf8;
-            }
-            QSpinBox::up-arrow,
-            QDoubleSpinBox::up-arrow,
-            QSpinBox::down-arrow,
-            QDoubleSpinBox::down-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-            }
-            QComboBox QAbstractItemView {
-                background: #ffffff;
-                color: #24384a;
-                border: 1px solid #c9d7e3;
-                border-radius: 12px;
-                outline: 0;
-                padding: 8px;
-                selection-background-color: #dbeaf8;
-                selection-color: #1f3550;
-            }
-            QComboBox QAbstractItemView::item {
-                min-height: 30px;
-                border-radius: 8px;
-                padding: 4px 10px;
-                margin: 2px 4px;
-                color: #24384a;
-                background: transparent;
-            }
-            QComboBox QAbstractItemView::item:hover {
-                background: #eef5fc;
-                color: #1f3550;
-            }
-            QComboBox QAbstractItemView::item:selected {
-                background: #dbeaf8;
-                color: #1f3550;
-            }
-            QCheckBox#parameterToggle {
-                min-width: 82px;
-                min-height: 30px;
-            }
-            QPushButton {
-                background: #edf1f5;
-                color: #243447;
-                border: 1px solid #d0d8e1;
-                border-radius: 10px;
-                padding: 9px 14px;
-            }
-            QPushButton:hover {
-                background: #e3eaf1;
-            }
-            QPushButton:disabled {
-                color: #8a98a8;
-                background: #f3f5f7;
-            }
-            QPushButton#primaryButton {
-                background: #1f6fb2;
-                color: #ffffff;
-                border: 1px solid #185a91;
-                font-weight: 600;
-                min-height: 38px;
-            }
-            QPushButton#primaryButton:hover {
-                background: #185f99;
-            }
-            QPushButton#toolManageButton {
-                padding: 7px 12px;
-                min-height: 0px;
-            }
-            QProgressBar {
-                min-height: 12px;
-                border-radius: 6px;
-                background: #e9edf2;
-                border: 1px solid #d7dde5;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                border-radius: 5px;
-                background: #2f88d6;
-            }
-            QTableWidget::item:selected {
-                background: #1565c0;
-                color: #ffffff;
-            }
-            QScrollArea {
-                border: none;
-                background: transparent;
-            }
-            """
-        )
+        install_theme_styles(self, window_style_sheet)
 
     def refresh_status_badge(self, text: str, tone: str) -> None:
         self.status_label.setText(text)
@@ -1634,8 +1371,55 @@ class MainWindow(QMainWindow):
             self.unload_tool_button.setEnabled(not self.current_tool().is_builtin)
 
 
+def build_forced_palette(dark_mode: bool) -> QPalette:
+    palette = QPalette()
+    if dark_mode:
+        palette.setColor(QPalette.Window, QColor("#1e2329"))
+        palette.setColor(QPalette.WindowText, QColor("#edf2f7"))
+        palette.setColor(QPalette.Base, QColor("#1f262e"))
+        palette.setColor(QPalette.AlternateBase, QColor("#2d3540"))
+        palette.setColor(QPalette.ToolTipBase, QColor("#262d35"))
+        palette.setColor(QPalette.ToolTipText, QColor("#edf2f7"))
+        palette.setColor(QPalette.Text, QColor("#edf2f7"))
+        palette.setColor(QPalette.Button, QColor("#37414d"))
+        palette.setColor(QPalette.ButtonText, QColor("#edf2f7"))
+        palette.setColor(QPalette.BrightText, QColor("#ffffff"))
+        palette.setColor(QPalette.Link, QColor("#4ea3ff"))
+        palette.setColor(QPalette.Highlight, QColor("#2b7fc9"))
+        palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        palette.setColor(QPalette.PlaceholderText, QColor("#95a3b3"))
+    else:
+        palette.setColor(QPalette.Window, QColor("#f3f5f7"))
+        palette.setColor(QPalette.WindowText, QColor("#253342"))
+        palette.setColor(QPalette.Base, QColor("#ffffff"))
+        palette.setColor(QPalette.AlternateBase, QColor("#f8fafc"))
+        palette.setColor(QPalette.ToolTipBase, QColor("#ffffff"))
+        palette.setColor(QPalette.ToolTipText, QColor("#253342"))
+        palette.setColor(QPalette.Text, QColor("#253342"))
+        palette.setColor(QPalette.Button, QColor("#eef4fa"))
+        palette.setColor(QPalette.ButtonText, QColor("#253342"))
+        palette.setColor(QPalette.BrightText, QColor("#ffffff"))
+        palette.setColor(QPalette.Link, QColor("#1f6fb2"))
+        palette.setColor(QPalette.Highlight, QColor("#2b7fc9"))
+        palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        palette.setColor(QPalette.PlaceholderText, QColor("#6b7c8e"))
+    return palette
+
+
+def apply_forced_color_scheme(app: QApplication) -> None:
+    requested_theme = os.environ.get("QUARD_UI_THEME", "system").strip().lower()
+    if requested_theme not in {"system", "dark", "light"}:
+        requested_theme = "system"
+    if requested_theme == "system":
+        return
+
+    app.setStyle("Fusion")
+    app.setPalette(build_forced_palette(dark_mode=requested_theme == "dark"))
+
+
 def main() -> int:
     app = QApplication(sys.argv)
+    apply_forced_color_scheme(app)
     window = MainWindow()
     window.show()
     return app.exec()
