@@ -15,6 +15,24 @@ TABLE_COLUMNS_PREFIX = "__QD_TABLE_COLUMNS__\t"
 TABLE_ROW_PREFIX = "__QD_TABLE_ROW__\t"
 CONTEXT_PREFIX = "__QD_CONTEXT__\t"
 PROGRESS_PREFIX = "__QD_PROGRESS__\t"
+USER_PARAMETER_ENV_PREFIX = "QUARD_ICEPAK_"
+
+USER_PARAMETER_KEYS = (
+    "grid_size_x",
+    "grid_size_y",
+    "grid_size_z",
+    "grid_sep_x",
+    "grid_sep_y",
+    "grid_sep_z",
+    "grid_max_elements",
+    "grid_tetra_smqual",
+    "grid_tetra_smiters",
+    "grid_enable_prism_layer",
+    "grid_tetra_prism_num",
+    "grid_hdm_feature_angle",
+    "grid_hdm_refine_features",
+    "grid_include_all_gaps",
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +53,19 @@ def resolve_tcl_script(explicit: str | None) -> Path:
     if not path.exists():
         raise FileNotFoundError(f"Tcl script not found: {path}")
     return path
+
+
+def build_mesh_override_env(parameters: dict[str, str] | None) -> dict[str, str]:
+    if not parameters:
+        return {}
+
+    overrides: dict[str, str] = {}
+    for key in USER_PARAMETER_KEYS:
+        value = parameters.get(key, "").strip()
+        if not value:
+            continue
+        overrides[f"{USER_PARAMETER_ENV_PREFIX}{key.upper()}"] = value
+    return overrides
 
 
 def _safe_float(value: str) -> float | None:
@@ -303,10 +334,13 @@ def generate_mesh_quality_report(
     icepak_bin: str | None = None,
     env_script: str | None = None,
     tcl_script: str | None = None,
+    mesh_parameters: dict[str, str] | None = None,
     log: Callable[[str], None] | None = None,
     progress: Callable[[ProgressUpdate], None] | None = None,
 ) -> ToolExecutionResult:
     logger = log or print
+    process_env = os.environ.copy()
+    process_env.update(build_mesh_override_env(mesh_parameters))
 
     project_dir = resolve_icepak_project(Path(input_path))
     resolved_icepak_bin = resolve_icepak_bin(icepak_bin, env_script)
@@ -332,7 +366,7 @@ def generate_mesh_quality_report(
 
     process = subprocess.Popen(
         command,
-        env=os.environ.copy(),
+        env=process_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

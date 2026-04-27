@@ -1,4 +1,4 @@
-from tool_model import ToolSpec
+from tool_model import ParameterSpec, ToolSpec
 
 from .result_dialog import show_mesh_quality_result
 from .tool import DEFAULT_TCL_SCRIPT, generate_mesh_quality_report
@@ -10,6 +10,7 @@ def execute_mesh_quality(parameters: dict[str, str], log=None, progress=None):
         icepak_bin=parameters.get("icepak_bin") or None,
         env_script=parameters.get("env_script") or None,
         tcl_script=parameters.get("tcl_script") or None,
+        mesh_parameters=parameters,
         log=log,
         progress=progress,
     )
@@ -24,7 +25,106 @@ TOOL_SPEC = ToolSpec(
         "并在结果窗口中展示最小值与最大值。"
     ),
     run_button_text="生成网格并评估",
-    parameters=(),
+    parameters=(
+        ParameterSpec(
+            key="grid_size_x",
+            label="全局尺寸 X",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_size_y",
+            label="全局尺寸 Y",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_size_z",
+            label="全局尺寸 Z",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_sep_x",
+            label="最小分离间隙 X",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_sep_y",
+            label="最小分离间隙 Y",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_sep_z",
+            label="最小分离间隙 Z",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_max_elements",
+            label="最大单元数",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_tetra_smqual",
+            label="平滑质量阈值",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_tetra_smiters",
+            label="平滑迭代次数",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_enable_prism_layer",
+            label="启用棱柱层 (0/1)",
+            browse_mode="none",
+            required=False,
+            example_hint="输入 0 或 1，留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_tetra_prism_num",
+            label="棱柱层数",
+            browse_mode="none",
+            required=False,
+            example_hint="留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_hdm_feature_angle",
+            label="特征角",
+            browse_mode="none",
+            required=False,
+            example_hint="单位为 deg，留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_hdm_refine_features",
+            label="启用特征细化 (0/1)",
+            browse_mode="none",
+            required=False,
+            example_hint="输入 0 或 1，留空则沿用工程当前设置。",
+        ),
+        ParameterSpec(
+            key="grid_include_all_gaps",
+            label="包含全部窄缝 (0/1)",
+            browse_mode="none",
+            required=False,
+            example_hint="输入 0 或 1，留空则沿用工程当前设置。",
+        ),
+    ),
     executor=execute_mesh_quality,
     internal_parameters={"tcl_script": str(DEFAULT_TCL_SCRIPT)},
     success_handler=show_mesh_quality_result,

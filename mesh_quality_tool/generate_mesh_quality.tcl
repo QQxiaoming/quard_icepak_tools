@@ -9,6 +9,46 @@ proc _emit_progress {mode value maximum message} {
     puts [join [list "__QD_PROGRESS__" $mode $value $maximum $message] "\t"]
 }
 
+proc _apply_env_override {env_key variable_name label} {
+    global env
+    upvar #0 $variable_name target
+
+    if {![info exists env($env_key)]} {
+        return
+    }
+
+    set raw_value [string trim $env($env_key)]
+    if {$raw_value eq ""} {
+        return
+    }
+
+    set target $raw_value
+    puts "应用用户参数: $label = $raw_value"
+}
+
+proc _apply_mesh_overrides {} {
+    global grid_size_x grid_size_y grid_size_z
+    global grid_sep_x grid_sep_y grid_sep_z
+    global grid_max_elements grid_tetra_smqual grid_tetra_smiters
+    global grid_enable_prism_layer grid_tetra_prism_num
+    global grid_hdm_feature_angle grid_hdm_refine_features grid_include_all_gaps
+
+    _apply_env_override "QUARD_ICEPAK_GRID_SIZE_X" grid_size_x "全局尺寸 X"
+    _apply_env_override "QUARD_ICEPAK_GRID_SIZE_Y" grid_size_y "全局尺寸 Y"
+    _apply_env_override "QUARD_ICEPAK_GRID_SIZE_Z" grid_size_z "全局尺寸 Z"
+    _apply_env_override "QUARD_ICEPAK_GRID_SEP_X" grid_sep_x "最小分离间隙 X"
+    _apply_env_override "QUARD_ICEPAK_GRID_SEP_Y" grid_sep_y "最小分离间隙 Y"
+    _apply_env_override "QUARD_ICEPAK_GRID_SEP_Z" grid_sep_z "最小分离间隙 Z"
+    _apply_env_override "QUARD_ICEPAK_GRID_MAX_ELEMENTS" grid_max_elements "最大单元数"
+    _apply_env_override "QUARD_ICEPAK_GRID_TETRA_SMQUAL" grid_tetra_smqual "平滑质量阈值"
+    _apply_env_override "QUARD_ICEPAK_GRID_TETRA_SMITERS" grid_tetra_smiters "平滑迭代次数"
+    _apply_env_override "QUARD_ICEPAK_GRID_ENABLE_PRISM_LAYER" grid_enable_prism_layer "启用棱柱层"
+    _apply_env_override "QUARD_ICEPAK_GRID_TETRA_PRISM_NUM" grid_tetra_prism_num "棱柱层数"
+    _apply_env_override "QUARD_ICEPAK_GRID_HDM_FEATURE_ANGLE" grid_hdm_feature_angle "特征角"
+    _apply_env_override "QUARD_ICEPAK_GRID_HDM_REFINE_FEATURES" grid_hdm_refine_features "启用特征细化"
+    _apply_env_override "QUARD_ICEPAK_GRID_INCLUDE_ALL_GAPS" grid_include_all_gaps "包含全部窄缝"
+}
+
 proc _metric_spec {metric_key} {
     switch -- $metric_key {
         det_aspect {
@@ -81,6 +121,7 @@ proc _emit_model_and_mesh_context {} {
 puts "=== Icepak mesh generation and quality evaluation ==="
 puts "开始生成网格，请等待 ..."
 
+_apply_mesh_overrides
 _emit_model_and_mesh_context
 _emit_progress determinate 5 100 "已读取模型与网格参数"
 _emit_progress indeterminate 0 0 "正在生成网格..."
