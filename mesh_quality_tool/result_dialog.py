@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from tool_model import TableData, ToolExecutionResult, ToolParameters
+from ui_components import apply_dialog_chrome
 
 
 class SortableTableWidgetItem(QTableWidgetItem):
@@ -38,6 +39,7 @@ class SortableTableWidgetItem(QTableWidgetItem):
 class MeshQualityResultDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        apply_dialog_chrome(self)
         self.setWindowTitle("网格质量评估结果")
         self.resize(980, 760)
 

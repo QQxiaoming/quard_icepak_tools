@@ -9,10 +9,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QBrush, QMouseEvent, QPainter, QPen, QPolygonF, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -27,6 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from tool_model import TableData, ToolExecutionResult, ToolParameters, build_output_path
+from ui_components import (
+    ModernComboBox,
+    ModernDoubleSpinBox,
+    ToggleSwitch,
+    apply_dialog_chrome,
+)
 
 from .tool import (
     THICKNESS_LABEL,
@@ -476,13 +479,14 @@ class BlockModelPreviewWidget(QWidget):
 class PairedBlockThicknessResultDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        apply_dialog_chrome(self)
         self.current_table_data: TableData | None = None
         self.parameters: ToolParameters = {}
         self.stack_axis = "z"
         self.highlighted_partner_name: str | None = None
 
         self.setWindowTitle("配对 Block 厚度调整")
-        self.resize(1100, 720)
+        self.resize(1280, 720)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -507,10 +511,10 @@ class PairedBlockThicknessResultDialog(QDialog):
 
         self.reset_view_button = QPushButton("重置视角", self)
         self.reset_view_button.clicked.connect(self.preview_widget.reset_view)
-        self.fill_checkbox = QCheckBox("启用面填充", self)
+        self.fill_checkbox = ToggleSwitch("启用面填充", self)
         self.fill_checkbox.setChecked(True)
         self.fill_checkbox.toggled.connect(self.preview_widget.set_fill_enabled)
-        self.focus_only_checkbox = QCheckBox("仅显示当前与配对 block", self)
+        self.focus_only_checkbox = ToggleSwitch("仅显示当前与配对 block", self)
         self.focus_only_checkbox.toggled.connect(self.preview_widget.set_show_focus_only)
 
         preview_actions = QHBoxLayout()
@@ -540,14 +544,14 @@ class PairedBlockThicknessResultDialog(QDialog):
         control_layout = QFormLayout()
         control_layout.setSpacing(10)
 
-        self.block_combo = QComboBox(self)
+        self.block_combo = ModernComboBox(self)
         self.block_combo.currentIndexChanged.connect(self.sync_table_from_combo)
         self.block_combo.currentIndexChanged.connect(self.update_preview)
 
-        self.direction_combo = QComboBox(self)
+        self.direction_combo = ModernComboBox(self)
         self.direction_combo.currentIndexChanged.connect(self.update_preview)
 
-        self.delta_spin = QDoubleSpinBox(self)
+        self.delta_spin = ModernDoubleSpinBox(self)
         self.delta_spin.setDecimals(6)
         self.delta_spin.setRange(-1000000.0, 1000000.0)
         self.delta_spin.setSingleStep(0.1)
@@ -577,6 +581,7 @@ class PairedBlockThicknessResultDialog(QDialog):
         self.export_csv_button.setEnabled(False)
         self.export_csv_button.clicked.connect(self.export_current_table_to_csv)
         self.apply_button = QPushButton("应用调整", self)
+        self.apply_button.setObjectName("primaryButton")
         self.apply_button.setEnabled(False)
         self.apply_button.clicked.connect(self.apply_adjustment)
         close_button = QPushButton("关闭", self)

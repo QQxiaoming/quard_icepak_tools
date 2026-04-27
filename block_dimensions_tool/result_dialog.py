@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from tool_model import TableData, ToolExecutionResult, ToolParameters, build_output_path
+from ui_components import apply_dialog_chrome
 
 
 HIDDEN_COLUMNS = {"object_type", "shape_name"}
@@ -252,6 +253,7 @@ class InterferenceReportDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        apply_dialog_chrome(self)
         self.setWindowTitle("干涉检测报告")
         self.resize(920, 680)
 
@@ -286,6 +288,7 @@ class InterferenceReportDialog(QDialog):
 class BlockDimensionsResultDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        apply_dialog_chrome(self)
         self.current_table_data: TableData | None = None
         self.input_path = ""
         self.current_visible_table_data: TableData | None = None

@@ -878,6 +878,10 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
                 background: #2f88d6;
             }
+            QTableWidget::item:selected {
+                background: #1565c0;
+                color: #ffffff;
+            }
             QScrollArea {
                 border: none;
                 background: transparent;
