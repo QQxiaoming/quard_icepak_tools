@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QSettings, QSize, QThread, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -28,6 +29,8 @@ from PySide6.QtWidgets import (
     QListView,
     QScrollArea,
     QSizePolicy,
+    QStyle,
+    QStyleOptionSpinBox,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -140,6 +143,57 @@ class ModernComboBox(QComboBox):
         painter.drawLine(center_x + size, center_y - 2, center_x, center_y + 3)
 
 
+class _ModernSpinBoxMixin:
+    def _init_modern_spin_box(self) -> None:
+        self.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+        self.setMinimumHeight(40)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        style = self.style()
+
+        up_rect = style.subControlRect(QStyle.CC_SpinBox, option, QStyle.SC_SpinBoxUp, self)
+        down_rect = style.subControlRect(QStyle.CC_SpinBox, option, QStyle.SC_SpinBoxDown, self)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        color = QColor("#4a6782") if self.isEnabled() else QColor("#a0adba")
+        pen = QPen(color, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+
+        self._draw_spin_chevron(painter, up_rect, True)
+        self._draw_spin_chevron(painter, down_rect, False)
+
+    def _draw_spin_chevron(self, painter: QPainter, rect, is_up: bool) -> None:
+        if not rect.isValid():
+            return
+
+        center_x = rect.center().x()
+        center_y = rect.center().y()
+        size = 4
+        if is_up:
+            painter.drawLine(center_x - size, center_y + 2, center_x, center_y - 2)
+            painter.drawLine(center_x + size, center_y + 2, center_x, center_y - 2)
+        else:
+            painter.drawLine(center_x - size, center_y - 2, center_x, center_y + 2)
+            painter.drawLine(center_x + size, center_y - 2, center_x, center_y + 2)
+
+
+class ModernSpinBox(_ModernSpinBoxMixin, QSpinBox):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._init_modern_spin_box()
+
+
+class ModernDoubleSpinBox(_ModernSpinBoxMixin, QDoubleSpinBox):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._init_modern_spin_box()
+
+
 class ParameterEditor(QWidget):
     valueChanged = Signal(str)
 
@@ -176,7 +230,7 @@ class ParameterEditor(QWidget):
             self._combo_box = combo_box
         elif parameter.value_type == "integer":
             self._toggle_box = self._build_optional_toggle(layout)
-            spin_box = QSpinBox(self)
+            spin_box = ModernSpinBox(self)
             spin_box.setRange(
                 int(parameter.minimum) if parameter.minimum is not None else -1_000_000_000,
                 int(parameter.maximum) if parameter.maximum is not None else 1_000_000_000,
@@ -190,7 +244,7 @@ class ParameterEditor(QWidget):
                 self._toggle_box.toggled.connect(lambda _checked: self.valueChanged.emit(self.text()))
         elif parameter.value_type == "float":
             self._toggle_box = self._build_optional_toggle(layout)
-            double_spin_box = QDoubleSpinBox(self)
+            double_spin_box = ModernDoubleSpinBox(self)
             double_spin_box.setDecimals(parameter.decimals)
             double_spin_box.setRange(
                 parameter.minimum if parameter.minimum is not None else -1_000_000_000.0,
@@ -709,6 +763,51 @@ class MainWindow(QMainWindow):
             }
             QComboBox:on {
                 background: #ffffff;
+            }
+            QSpinBox,
+            QDoubleSpinBox {
+                padding: 8px 38px 8px 12px;
+                font-weight: 600;
+                color: #24384a;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f8fbfe);
+            }
+            QSpinBox:hover,
+            QDoubleSpinBox:hover {
+                border: 1px solid #9cb9d6;
+                background: #ffffff;
+            }
+            QSpinBox::up-button,
+            QDoubleSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 28px;
+                border-left: 1px solid #d7e0e8;
+                border-bottom: 1px solid #d7e0e8;
+                background: #eef4fa;
+                border-top-right-radius: 10px;
+            }
+            QSpinBox::down-button,
+            QDoubleSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 28px;
+                border-left: 1px solid #d7e0e8;
+                background: #eef4fa;
+                border-bottom-right-radius: 10px;
+            }
+            QSpinBox::up-button:hover,
+            QDoubleSpinBox::up-button:hover,
+            QSpinBox::down-button:hover,
+            QDoubleSpinBox::down-button:hover {
+                background: #e2edf8;
+            }
+            QSpinBox::up-arrow,
+            QDoubleSpinBox::up-arrow,
+            QSpinBox::down-arrow,
+            QDoubleSpinBox::down-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
             }
             QComboBox QAbstractItemView {
                 background: #ffffff;
