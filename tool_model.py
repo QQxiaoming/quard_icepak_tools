@@ -43,11 +43,17 @@ class ParameterSpec:
     key: str
     label: str
     browse_mode: str
+    value_type: str = "text"
     required: bool = False
     file_filter: str = "All Files (*)"
     default_value: str = ""
     default_output_name: str = ""
     example_hint: str = ""
+    choices: tuple[tuple[str, str], ...] = ()
+    minimum: float | None = None
+    maximum: float | None = None
+    single_step: float | None = None
+    decimals: int = 6
 
 
 @dataclass(frozen=True)

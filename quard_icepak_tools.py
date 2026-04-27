@@ -5,11 +5,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, QThread, Qt, Signal
+from PySide6.QtCore import QObject, QSettings, QSize, QThread, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFrame,
     QFileDialog,
     QGridLayout,
@@ -22,8 +25,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QProgressBar,
+    QListView,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -51,6 +56,231 @@ from tool_model import (
 class ExecutionRequest:
     tool: ToolSpec
     parameters: ToolParameters
+
+
+class ToggleSwitch(QCheckBox):
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setObjectName("parameterToggle")
+
+    def sizeHint(self) -> QSize:
+        text_width = self.fontMetrics().horizontalAdvance(self.text())
+        return QSize(text_width + 68, 30)
+
+    def hitButton(self, pos) -> bool:
+        return self.rect().contains(pos)
+
+    def paintEvent(self, event) -> None:
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        track_width = 40
+        track_height = 22
+        knob_diameter = 16
+        spacing = 10
+        track_rect = rect.adjusted(rect.width() - track_width, (rect.height() - track_height) // 2, 0, -(rect.height() - track_height) // 2)
+        text_rect = rect.adjusted(0, 0, -(track_width + spacing), 0)
+
+        text_color = QColor("#41586d") if self.isEnabled() else QColor("#9aa8b6")
+        painter.setPen(text_color)
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, self.text())
+
+        if self.isChecked():
+            track_color = QColor("#2b7fc9") if self.isEnabled() else QColor("#9dc1e2")
+            border_color = QColor("#236ba8") if self.isEnabled() else QColor("#89afcf")
+        else:
+            track_color = QColor("#dde5ed") if self.isEnabled() else QColor("#edf1f5")
+            border_color = QColor("#c7d1db") if self.isEnabled() else QColor("#dde4eb")
+
+        painter.setPen(QPen(border_color, 1))
+        painter.setBrush(track_color)
+        painter.drawRoundedRect(track_rect, track_height / 2, track_height / 2)
+
+        knob_x = track_rect.right() - knob_diameter - 3 if self.isChecked() else track_rect.left() + 3
+        knob_rect = track_rect.adjusted(
+            knob_x - track_rect.left(),
+            3,
+            -(track_rect.width() - (knob_x - track_rect.left()) - knob_diameter),
+            -3,
+        )
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawEllipse(knob_rect)
+
+        if self.hasFocus():
+            focus_pen = QPen(QColor("#8cb9e6"), 2)
+            painter.setPen(focus_pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(track_rect.adjusted(-2, -2, 2, 2), (track_height + 4) / 2, (track_height + 4) / 2)
+
+
+class ModernComboBox(QComboBox):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumHeight(40)
+        self.setView(QListView(self))
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        color = QColor("#4a6782") if self.isEnabled() else QColor("#a0adba")
+        pen = QPen(color, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+
+        center_x = self.width() - 21
+        center_y = self.height() // 2 + 1
+        size = 5
+        painter.drawLine(center_x - size, center_y - 2, center_x, center_y + 3)
+        painter.drawLine(center_x + size, center_y - 2, center_x, center_y + 3)
+
+
+class ParameterEditor(QWidget):
+    valueChanged = Signal(str)
+
+    def __init__(self, parameter: ParameterSpec, value: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.parameter = parameter
+        self._line_edit: QLineEdit | None = None
+        self._combo_box: QComboBox | None = None
+        self._spin_box: QSpinBox | None = None
+        self._double_spin_box: QDoubleSpinBox | None = None
+        self._toggle_box: QCheckBox | None = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        if parameter.value_type == "boolean":
+            combo_box = ModernComboBox(self)
+            if not parameter.required:
+                combo_box.addItem("未设置（沿用当前值）", "")
+            combo_box.addItem("是", "1")
+            combo_box.addItem("否", "0")
+            combo_box.currentIndexChanged.connect(lambda _index: self.valueChanged.emit(self.text()))
+            layout.addWidget(combo_box)
+            self._combo_box = combo_box
+        elif parameter.value_type == "choice" and parameter.choices:
+            combo_box = ModernComboBox(self)
+            if not parameter.required:
+                combo_box.addItem("未设置", "")
+            for label, option_value in parameter.choices:
+                combo_box.addItem(label, option_value)
+            combo_box.currentIndexChanged.connect(lambda _index: self.valueChanged.emit(self.text()))
+            layout.addWidget(combo_box)
+            self._combo_box = combo_box
+        elif parameter.value_type == "integer":
+            self._toggle_box = self._build_optional_toggle(layout)
+            spin_box = QSpinBox(self)
+            spin_box.setRange(
+                int(parameter.minimum) if parameter.minimum is not None else -1_000_000_000,
+                int(parameter.maximum) if parameter.maximum is not None else 1_000_000_000,
+            )
+            spin_box.setSingleStep(int(parameter.single_step) if parameter.single_step is not None else 1)
+            spin_box.valueChanged.connect(lambda _value: self.valueChanged.emit(self.text()))
+            layout.addWidget(spin_box, 1)
+            self._spin_box = spin_box
+            if self._toggle_box is not None:
+                self._toggle_box.toggled.connect(spin_box.setEnabled)
+                self._toggle_box.toggled.connect(lambda _checked: self.valueChanged.emit(self.text()))
+        elif parameter.value_type == "float":
+            self._toggle_box = self._build_optional_toggle(layout)
+            double_spin_box = QDoubleSpinBox(self)
+            double_spin_box.setDecimals(parameter.decimals)
+            double_spin_box.setRange(
+                parameter.minimum if parameter.minimum is not None else -1_000_000_000.0,
+                parameter.maximum if parameter.maximum is not None else 1_000_000_000.0,
+            )
+            double_spin_box.setSingleStep(parameter.single_step if parameter.single_step is not None else 0.1)
+            double_spin_box.valueChanged.connect(lambda _value: self.valueChanged.emit(self.text()))
+            layout.addWidget(double_spin_box, 1)
+            self._double_spin_box = double_spin_box
+            if self._toggle_box is not None:
+                self._toggle_box.toggled.connect(double_spin_box.setEnabled)
+                self._toggle_box.toggled.connect(lambda _checked: self.valueChanged.emit(self.text()))
+        else:
+            line_edit = QLineEdit(self)
+            line_edit.setClearButtonEnabled(True)
+            line_edit.textChanged.connect(self.valueChanged.emit)
+            layout.addWidget(line_edit)
+            self._line_edit = line_edit
+
+        self.setText(value)
+
+    def _build_optional_toggle(self, layout: QHBoxLayout) -> QCheckBox | None:
+        if self.parameter.required:
+            return None
+
+        toggle_box = ToggleSwitch("覆盖", self)
+        layout.addWidget(toggle_box)
+        return toggle_box
+
+    def setPlaceholderText(self, text: str) -> None:
+        if self._line_edit is not None:
+            self._line_edit.setPlaceholderText(text)
+
+    def text(self) -> str:
+        if self._line_edit is not None:
+            return self._line_edit.text().strip()
+
+        if self._combo_box is not None:
+            value = self._combo_box.currentData()
+            return "" if value is None else str(value).strip()
+
+        if self._spin_box is not None:
+            if self._toggle_box is not None and not self._toggle_box.isChecked():
+                return ""
+            return str(self._spin_box.value())
+
+        if self._double_spin_box is not None:
+            if self._toggle_box is not None and not self._toggle_box.isChecked():
+                return ""
+            value = f"{self._double_spin_box.value():.{self.parameter.decimals}f}".rstrip("0").rstrip(".")
+            return value or "0"
+
+        return ""
+
+    def setText(self, value: str) -> None:
+        normalized = value.strip()
+
+        if self._line_edit is not None:
+            self._line_edit.setText(normalized)
+            return
+
+        if self._combo_box is not None:
+            index = self._combo_box.findData(normalized)
+            if index < 0 and not normalized and self._combo_box.count() > 0:
+                index = 0
+            if index >= 0:
+                self._combo_box.setCurrentIndex(index)
+            return
+
+        if self._spin_box is not None:
+            if self._toggle_box is not None:
+                self._toggle_box.setChecked(bool(normalized))
+                self._spin_box.setEnabled(bool(normalized))
+            if normalized:
+                self._spin_box.setValue(int(float(normalized)))
+            return
+
+        if self._double_spin_box is not None:
+            if self._toggle_box is not None:
+                self._toggle_box.setChecked(bool(normalized))
+                self._double_spin_box.setEnabled(bool(normalized))
+            if normalized:
+                self._double_spin_box.setValue(float(normalized))
+
+    def setEnabled(self, enabled: bool) -> None:
+        super().setEnabled(enabled)
+        if self._spin_box is not None and self._toggle_box is not None:
+            self._spin_box.setEnabled(enabled and self._toggle_box.isChecked())
+        if self._double_spin_box is not None and self._toggle_box is not None:
+            self._double_spin_box.setEnabled(enabled and self._toggle_box.isChecked())
 
 
 class ToolWorker(QObject):
@@ -111,11 +341,12 @@ class MainWindow(QMainWindow):
         self.worker: ToolWorker | None = None
         self.settings = QSettings("QQxiaoming", APP_NAME)
         self.tool_specs = discover_tools()
-        self.shared_parameter_widgets: dict[str, QLineEdit] = {}
+        self.shared_parameter_widgets: dict[str, ParameterEditor] = {}
         self.shared_parameter_specs: dict[str, ParameterSpec] = {}
-        self.tool_parameter_widgets: dict[str, QLineEdit] = {}
+        self.tool_parameter_widgets: dict[str, ParameterEditor] = {}
         self.tool_parameter_specs: dict[str, ParameterSpec] = {}
         self.app_version = get_app_version()
+        self.parameter_label_width = 192
 
         self.setWindowTitle(get_window_title())
         self.resize(1180, 760)
@@ -145,10 +376,10 @@ class MainWindow(QMainWindow):
         tool_group = QGroupBox("工具概览", self)
         tool_layout = QGridLayout(tool_group)
         tool_layout.setContentsMargins(18, 18, 18, 18)
-        tool_layout.setHorizontalSpacing(12)
+        tool_layout.setHorizontalSpacing(0)
         tool_layout.setVerticalSpacing(12)
 
-        self.tool_combo = QComboBox(self)
+        self.tool_combo = ModernComboBox(self)
         self.tool_combo.setMinimumWidth(360)
         for tool in self.tool_specs:
             self.add_tool_combo_item(tool)
@@ -204,23 +435,54 @@ class MainWindow(QMainWindow):
         detail_layout.addWidget(meta_panel)
         detail_layout.addWidget(self.tool_description)
 
-        tool_layout.addWidget(self.tool_summary, 0, 0, 1, 4)
-        tool_layout.addWidget(manage_panel, 1, 0, 1, 4)
-        tool_layout.addWidget(QLabel("当前工具", self), 2, 0)
-        tool_layout.addWidget(self.tool_combo, 2, 1, 1, 3)
-        tool_layout.addWidget(QLabel("工具详情", self), 3, 0, Qt.AlignTop)
-        tool_layout.addWidget(detail_panel, 3, 1, 1, 3)
+        tool_layout.addWidget(self.tool_summary, 0, 0, 1, 3)
+        tool_layout.addWidget(
+            self._build_overview_row(
+                title="工具管理",
+                meta="加载 / 卸载",
+                content=manage_panel,
+                help_text="管理当前工作区可用的内置工具和自定义工具。",
+            ),
+            1,
+            0,
+            1,
+            3,
+        )
+        tool_layout.addWidget(
+            self._build_overview_row(
+                title="当前工具",
+                meta="选择 / 切换",
+                content=self.tool_combo,
+                help_text="从已发现的工具中选择当前要执行的一项。",
+            ),
+            2,
+            0,
+            1,
+            3,
+        )
+        tool_layout.addWidget(
+            self._build_overview_row(
+                title="工具详情",
+                meta="说明 / 版本",
+                content=detail_panel,
+                help_text="查看当前工具的功能说明、版本和来源信息。",
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
 
         shared_group = QGroupBox("公共配置", self)
         self.shared_form_layout = QGridLayout(shared_group)
         self.shared_form_layout.setContentsMargins(18, 18, 18, 18)
-        self.shared_form_layout.setHorizontalSpacing(12)
+        self.shared_form_layout.setHorizontalSpacing(0)
         self.shared_form_layout.setVerticalSpacing(12)
 
         tool_form_group = QGroupBox("工具专用配置", self)
         self.tool_form_layout = QGridLayout(tool_form_group)
         self.tool_form_layout.setContentsMargins(18, 18, 18, 18)
-        self.tool_form_layout.setHorizontalSpacing(12)
+        self.tool_form_layout.setHorizontalSpacing(0)
         self.tool_form_layout.setVerticalSpacing(12)
 
         left_layout.addWidget(tool_group)
@@ -376,6 +638,15 @@ class MainWindow(QMainWindow):
                 color: #6b7c8e;
                 font-size: 12px;
             }
+            QLabel#parameterTitle {
+                color: #203140;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLabel#parameterMeta {
+                color: #7a8c9d;
+                font-size: 11px;
+            }
             QLabel#emptyStateLabel {
                 color: #5f7285;
                 background: #f7f9fb;
@@ -383,8 +654,21 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
                 padding: 12px;
             }
+            QFrame#parameterRow {
+                background: #f8fafc;
+                border: 1px solid #dde5ee;
+                border-radius: 14px;
+            }
+            QWidget#parameterTitlePanel {
+                background: #eef3f8;
+                border-right: 1px solid #dde5ee;
+                border-top-left-radius: 13px;
+                border-bottom-left-radius: 13px;
+            }
             QLineEdit,
             QComboBox,
+            QSpinBox,
+            QDoubleSpinBox,
             QPlainTextEdit {
                 background: #ffffff;
                 border: 1px solid #c9d3dd;
@@ -394,8 +678,67 @@ class MainWindow(QMainWindow):
             }
             QLineEdit:focus,
             QComboBox:focus,
+            QSpinBox:focus,
+            QDoubleSpinBox:focus,
             QPlainTextEdit:focus {
                 border: 1px solid #4e8ccf;
+            }
+            QComboBox {
+                padding: 8px 40px 8px 12px;
+                font-weight: 600;
+                color: #24384a;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f8fbfe);
+            }
+            QComboBox:hover {
+                border: 1px solid #9cb9d6;
+                background: #ffffff;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 34px;
+                border-left: 1px solid #d7e0e8;
+                background: #eef4fa;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
+            }
+            QComboBox:on {
+                background: #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background: #ffffff;
+                color: #24384a;
+                border: 1px solid #c9d7e3;
+                border-radius: 12px;
+                outline: 0;
+                padding: 8px;
+                selection-background-color: #dbeaf8;
+                selection-color: #1f3550;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 30px;
+                border-radius: 8px;
+                padding: 4px 10px;
+                margin: 2px 4px;
+                color: #24384a;
+                background: transparent;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: #eef5fc;
+                color: #1f3550;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: #dbeaf8;
+                color: #1f3550;
+            }
+            QCheckBox#parameterToggle {
+                min-width: 82px;
+                min-height: 30px;
             }
             QPushButton {
                 background: #edf1f5;
@@ -454,6 +797,14 @@ class MainWindow(QMainWindow):
             return parameter.example_hint
         if parameter.default_output_name:
             return f"默认自动生成 {parameter.default_output_name}"
+        if parameter.value_type == "boolean":
+            return "选择是否覆盖当前值"
+        if parameter.value_type == "choice":
+            return "选择一个可用选项"
+        if parameter.value_type == "integer":
+            return "输入整数参数"
+        if parameter.value_type == "float":
+            return "输入数值参数"
         if parameter.browse_mode == "project_path":
             return "选择 .wbpj 文件或可定位到 IcepakProj 的目录"
         if parameter.browse_mode == "save_file":
@@ -464,7 +815,12 @@ class MainWindow(QMainWindow):
 
     def parameter_help_text(self, parameter: ParameterSpec) -> str:
         parts: list[str] = []
-        parts.append("必填" if parameter.required else "选填")
+        if parameter.choices:
+            parts.append("可选值：" + " / ".join(label for label, _value in parameter.choices))
+        if parameter.minimum is not None or parameter.maximum is not None:
+            lower = "-inf" if parameter.minimum is None else str(parameter.minimum)
+            upper = "+inf" if parameter.maximum is None else str(parameter.maximum)
+            parts.append(f"范围：{lower} ~ {upper}")
         if parameter.example_hint:
             parts.append(f"示例：{parameter.example_hint}")
         elif parameter.default_output_name:
@@ -473,53 +829,142 @@ class MainWindow(QMainWindow):
             parts.append(f"默认值：{self.default_parameter_value(parameter)}")
         return " | ".join(parts)
 
+    def _build_overview_row(
+        self,
+        title: str,
+        meta: str,
+        content: QWidget,
+        help_text: str,
+    ) -> QFrame:
+        row_frame = QFrame(self)
+        row_frame.setObjectName("parameterRow")
+        row_layout = QHBoxLayout(row_frame)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(0)
+
+        title_panel = QWidget(row_frame)
+        title_panel.setObjectName("parameterTitlePanel")
+        title_panel.setFixedWidth(self.parameter_label_width)
+        title_layout = QVBoxLayout(title_panel)
+        title_layout.setContentsMargins(16, 14, 14, 14)
+        title_layout.setSpacing(6)
+
+        title_label = QLabel(title, row_frame)
+        title_label.setObjectName("parameterTitle")
+        title_label.setWordWrap(True)
+        title_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        meta_label = QLabel(meta, row_frame)
+        meta_label.setObjectName("parameterMeta")
+        meta_label.setWordWrap(True)
+
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(meta_label)
+        title_layout.addStretch(1)
+
+        content_panel = QWidget(row_frame)
+        content_layout = QVBoxLayout(content_panel)
+        content_layout.setContentsMargins(16, 14, 16, 14)
+        content_layout.setSpacing(6)
+
+        help_label = QLabel(help_text, row_frame)
+        help_label.setObjectName("fieldHelp")
+        help_label.setWordWrap(True)
+
+        content_layout.addWidget(content)
+        content_layout.addWidget(help_label)
+
+        row_layout.addWidget(title_panel, 0)
+        row_layout.addWidget(content_panel, 1)
+        return row_frame
+
     def _add_browse_row(
         self,
         layout: QGridLayout,
-        widgets: dict[str, QLineEdit],
+        widgets: dict[str, ParameterEditor],
         specs: dict[str, ParameterSpec],
         row: int,
         parameter: ParameterSpec,
         value: str,
     ) -> None:
-        label_text = parameter.label + (" *" if parameter.required else "")
+        editor = ParameterEditor(parameter, value, self)
+        editor.setPlaceholderText(self.parameter_placeholder_text(parameter))
 
-        label = QLabel(label_text, self)
+        row_frame = QFrame(self)
+        row_frame.setObjectName("parameterRow")
+        row_layout = QHBoxLayout(row_frame)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(0)
+
+        title_panel = QWidget(row_frame)
+        title_panel.setObjectName("parameterTitlePanel")
+        title_panel.setFixedWidth(self.parameter_label_width)
+        title_layout = QVBoxLayout(title_panel)
+        title_layout.setContentsMargins(16, 14, 14, 14)
+        title_layout.setSpacing(6)
+
+        label_text = parameter.label + (" *" if parameter.required else "")
+        label = QLabel(label_text, row_frame)
+        label.setObjectName("parameterTitle")
+        label.setWordWrap(True)
         label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
-        line_edit = QLineEdit(value, self)
-        line_edit.setClearButtonEnabled(True)
-        line_edit.setPlaceholderText(self.parameter_placeholder_text(parameter))
+        meta_parts = ["必填" if parameter.required else "选填"]
+        type_labels = {
+            "text": "文本",
+            "integer": "整数",
+            "float": "数值",
+            "boolean": "布尔",
+            "choice": "枚举",
+        }
+        meta_parts.append(type_labels.get(parameter.value_type, "文本"))
+        meta_label = QLabel("  ·  ".join(meta_parts), row_frame)
+        meta_label.setObjectName("parameterMeta")
+        meta_label.setWordWrap(True)
 
-        field_container = QWidget(self)
+        title_layout.addWidget(label)
+        title_layout.addWidget(meta_label)
+        title_layout.addStretch(1)
+
+        field_container = QWidget(row_frame)
         field_layout = QVBoxLayout(field_container)
-        field_layout.setContentsMargins(0, 0, 0, 0)
-        field_layout.setSpacing(4)
+        field_layout.setContentsMargins(16, 14, 16, 14)
+        field_layout.setSpacing(6)
 
         field_help = QLabel(self.parameter_help_text(parameter), self)
         field_help.setObjectName("fieldHelp")
         field_help.setWordWrap(True)
 
-        field_layout.addWidget(line_edit)
+        field_layout.addWidget(editor)
         field_layout.addWidget(field_help)
 
-        browse_button = QPushButton("浏览", self)
-        browse_button.clicked.connect(
-            lambda _checked=False, key=parameter.key: self.browse_parameter(key)
-        )
+        row_layout.addWidget(title_panel, 0)
         if parameter.browse_mode == "none":
-            browse_button.setEnabled(False)
+            row_layout.addWidget(field_container, 1)
+        else:
+            browse_button = QPushButton("浏览", self)
+            browse_button.setObjectName("secondaryButton")
+            browse_button.clicked.connect(
+                lambda _checked=False, key=parameter.key: self.browse_parameter(key)
+            )
+            button_panel = QWidget(row_frame)
+            button_layout = QVBoxLayout(button_panel)
+            button_layout.setContentsMargins(0, 14, 16, 14)
+            button_layout.setSpacing(0)
+            button_layout.addWidget(browse_button)
+            button_layout.addStretch(1)
 
-        layout.addWidget(label, row, 0)
-        layout.addWidget(field_container, row, 1)
-        layout.addWidget(browse_button, row, 2, Qt.AlignTop)
+            row_layout.addWidget(field_container, 1)
+            row_layout.addWidget(button_panel, 0)
 
-        widgets[parameter.key] = line_edit
+        layout.addWidget(row_frame, row, 0, 1, 3)
+
+        widgets[parameter.key] = editor
         specs[parameter.key] = parameter
-        line_edit.textChanged.connect(self.save_settings)
+        editor.valueChanged.connect(self.save_settings)
 
         if parameter.key == "input_path":
-            line_edit.textChanged.connect(self.maybe_update_output_path)
+            editor.valueChanged.connect(self.maybe_update_output_path)
 
     def shared_setting_key(self, parameter_key: str) -> str:
         return f"shared/{parameter_key}"

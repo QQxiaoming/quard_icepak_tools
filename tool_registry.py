@@ -280,10 +280,6 @@ def discover_tools() -> list[ToolSpec]:
 TOOLS = discover_tools()
 
 
-def default_env_script_path() -> str:
-    return ""
-
-
 SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec(
         key="env_script",
@@ -291,7 +287,6 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
         browse_mode="open_file",
         required=False,
         file_filter="Scripts (*.sh *.bat *.cmd);;All Files (*)",
-        default_value=default_env_script_path(),
     ),
     ParameterSpec(
         key="input_path",
@@ -299,7 +294,6 @@ SHARED_PARAMETERS: tuple[ParameterSpec, ...] = (
         browse_mode="project_path",
         required=True,
         file_filter="Workbench Project (*.wbpj);;All Files (*)",
-        default_value=str(Path.cwd() / "test" / "01.wbpj"),
     ),
 )
 
