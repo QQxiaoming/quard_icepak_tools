@@ -251,23 +251,27 @@ class MainWindow(QMainWindow):
 
         return None
 
+    def setting_value_or_default(self, key: str, default_value: str) -> str:
+        if not self.settings.contains(key):
+            return default_value
+        return self.settings.value(key, "", type=str)
+
     def saved_shared_value(self, parameter: ParameterSpec) -> str:
-        saved_value = self.settings.value(self.shared_setting_key(parameter.key), "", type=str)
-        return saved_value or self.default_parameter_value(parameter)
+        return self.setting_value_or_default(
+            self.shared_setting_key(parameter.key),
+            self.default_parameter_value(parameter),
+        )
 
     def saved_tool_value(self, tool: ToolSpec, parameter: ParameterSpec) -> str:
-        saved_value = self.settings.value(
-            self.tool_setting_key(tool.identifier, parameter.key),
-            "",
-            type=str,
-        )
-        if not saved_value:
-            saved_value = self.settings.value(
-                self.tool_setting_key(tool.key, parameter.key),
-                "",
-                type=str,
-            )
-        return saved_value or self.default_parameter_value(parameter)
+        identifier_key = self.tool_setting_key(tool.identifier, parameter.key)
+        if self.settings.contains(identifier_key):
+            return self.settings.value(identifier_key, "", type=str)
+
+        legacy_key = self.tool_setting_key(tool.key, parameter.key)
+        if self.settings.contains(legacy_key):
+            return self.settings.value(legacy_key, "", type=str)
+
+        return self.default_parameter_value(parameter)
 
     def restore_settings(self) -> None:
         self.restore_window_geometry()
