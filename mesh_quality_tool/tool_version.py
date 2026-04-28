@@ -1,1 +1,1 @@
-TOOL_VERSION = "0.0.1"
+TOOL_VERSION = "0.0.2"
