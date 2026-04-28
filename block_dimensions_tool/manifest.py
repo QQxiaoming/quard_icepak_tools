@@ -20,7 +20,7 @@ TOOL_SPEC = ToolSpec(
     name="Block 尺寸统计工具",
     version=TOOL_VERSION,
     description=(
-        "加载 Classic Icepak 工程，并在界面中显示各个 block 的尺寸和包围盒坐标。"
+        "加载 Classic Icepak 工程，并按 Icepak 模型树层级显示 block 尺寸和包围盒坐标。"
     ),
     run_button_text="开始统计",
     parameters=(),

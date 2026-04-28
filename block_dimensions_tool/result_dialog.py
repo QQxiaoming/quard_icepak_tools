@@ -17,15 +17,33 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from icepak_model_tree_tool.result_dialog import ModelTreeNodeEntry, build_model_tree_entries
 from tool_model import TableData, ToolExecutionResult, ToolParameters, build_output_path
-from ui_components import apply_dialog_chrome
+from ui_components import ModernComboBox, ModernSpinBox, apply_dialog_chrome
 
-
-HIDDEN_COLUMNS = {"object_type", "shape_name"}
+TREE_COLUMNS = (
+    "名称",
+    "对象类型",
+    "节点类型",
+    "单位",
+    "dx",
+    "dy",
+    "dz",
+    "xmin",
+    "xmax",
+    "ymin",
+    "ymax",
+    "zmin",
+    "zmax",
+)
+DISPLAY_MODE_TREE = "tree"
+DISPLAY_MODE_FLAT = "flat"
 INTERFERENCE_REQUIRED_COLUMNS = (
     "object_name",
     "length_unit",
@@ -51,16 +69,146 @@ class BlockBoundingBox:
     zmax: float
 
 
-def build_visible_table_data(table_data: TableData) -> TableData:
-    visible_indexes = [
-        index for index, column in enumerate(table_data.columns) if column not in HIDDEN_COLUMNS
-    ]
+def _table_row_to_dict(columns: tuple[str, ...], row: tuple[str, ...]) -> dict[str, str]:
+    return {
+        column: row[index] if index < len(row) else ""
+        for index, column in enumerate(columns)
+    }
+
+
+def build_tree_row_lookup(table_data: TableData) -> dict[str, dict[str, str]]:
+    if "node_id" not in table_data.columns:
+        return {}
+
+    node_id_index = table_data.columns.index("node_id")
+    row_lookup: dict[str, dict[str, str]] = {}
+    for row in table_data.rows:
+        if node_id_index >= len(row):
+            continue
+        node_id = row[node_id_index].strip()
+        if not node_id:
+            continue
+        row_lookup[node_id] = _table_row_to_dict(table_data.columns, row)
+    return row_lookup
+
+
+def count_tree_nodes(entries: tuple[ModelTreeNodeEntry, ...]) -> int:
+    total = 0
+    for node in entries:
+        total += 1
+        total += count_tree_nodes(node.children)
+    return total
+
+
+def count_block_nodes(
+    entries: tuple[ModelTreeNodeEntry, ...],
+    row_lookup: dict[str, dict[str, str]],
+) -> int:
+    total = 0
+    for node in entries:
+        row = row_lookup.get(node.node_id, {})
+        if row.get("node_kind") == "object" and row.get("object_type") == "block":
+            total += 1
+        total += count_block_nodes(node.children, row_lookup)
+    return total
+
+
+def _node_row_values(node: ModelTreeNodeEntry, row_lookup: dict[str, dict[str, str]]) -> tuple[str, ...]:
+    row = row_lookup.get(node.node_id, {})
+    return (
+        node.object_name,
+        node.object_type,
+        node.node_kind,
+        row.get("length_unit", ""),
+        row.get("dx", ""),
+        row.get("dy", ""),
+        row.get("dz", ""),
+        row.get("xmin", ""),
+        row.get("xmax", ""),
+        row.get("ymin", ""),
+        row.get("ymax", ""),
+        row.get("zmin", ""),
+        row.get("zmax", ""),
+    )
+
+
+def flatten_tree_table_data(
+    entries: tuple[ModelTreeNodeEntry, ...],
+    row_lookup: dict[str, dict[str, str]],
+    default_export_name: str,
+    indent_names: bool = True,
+) -> TableData:
+    rows: list[tuple[str, ...]] = []
+
+    def append_rows(nodes: tuple[ModelTreeNodeEntry, ...], depth: int) -> None:
+        for node in nodes:
+            row_values = list(_node_row_values(node, row_lookup))
+            if indent_names:
+                row_values[0] = f"{'  ' * depth}{row_values[0]}"
+            rows.append(tuple(row_values))
+            append_rows(node.children, depth + 1)
+
+    append_rows(entries, 0)
     return TableData(
-        columns=tuple(table_data.columns[index] for index in visible_indexes),
-        rows=tuple(
-            tuple(row[index] for index in visible_indexes)
-            for row in table_data.rows
-        ),
+        columns=TREE_COLUMNS,
+        rows=tuple(rows),
+        default_export_name=default_export_name,
+    )
+
+
+def build_flat_table_data(
+    table_data: TableData,
+    row_lookup: dict[str, dict[str, str]],
+    filter_text: str = "",
+) -> TableData:
+    if "node_id" not in table_data.columns:
+        return TableData(columns=TREE_COLUMNS, rows=(), default_export_name=table_data.default_export_name)
+
+    node_id_index = table_data.columns.index("node_id")
+    filtered_rows: list[tuple[str, ...]] = []
+    for row in table_data.rows:
+        if node_id_index >= len(row):
+            continue
+        node_id = row[node_id_index].strip()
+        if not node_id:
+            continue
+
+        row_map = row_lookup.get(node_id, _table_row_to_dict(table_data.columns, row))
+        bbox_values = (
+            row_map.get("xmin", ""),
+            row_map.get("xmax", ""),
+            row_map.get("ymin", ""),
+            row_map.get("ymax", ""),
+            row_map.get("zmin", ""),
+            row_map.get("zmax", ""),
+        )
+        if any(value == "" for value in bbox_values):
+            continue
+
+        row_values = (
+            row_map.get("object_name", ""),
+            row_map.get("object_type", ""),
+            row_map.get("node_kind", ""),
+            row_map.get("length_unit", ""),
+            row_map.get("dx", ""),
+            row_map.get("dy", ""),
+            row_map.get("dz", ""),
+            row_map.get("xmin", ""),
+            row_map.get("xmax", ""),
+            row_map.get("ymin", ""),
+            row_map.get("ymax", ""),
+            row_map.get("zmin", ""),
+            row_map.get("zmax", ""),
+        )
+        if filter_text:
+            searchable = " ".join(row_values[:4]).casefold()
+            if filter_text not in searchable:
+                continue
+        filtered_rows.append(row_values)
+
+    return TableData(
+        columns=TREE_COLUMNS,
+        rows=tuple(filtered_rows),
         default_export_name=table_data.default_export_name,
     )
 
@@ -81,6 +229,12 @@ def collect_block_bounding_boxes(
     seen_names: set[str] = set()
 
     for row in table_data.rows:
+        row_map = _table_row_to_dict(table_data.columns, row)
+        if row_map.get("object_type") and row_map.get("object_type") != "block":
+            continue
+        if row_map.get("node_kind") and row_map.get("node_kind") != "object":
+            continue
+
         object_name = row[index_map["object_name"]].strip()
         if not object_name or object_name in seen_names:
             continue
@@ -226,6 +380,30 @@ def build_interference_report(table_data: TableData) -> tuple[str, str, bool]:
     return summary, "\n\n".join(details_parts), interference_count > 0 or containment_count > 0
 
 
+class SortableTreeWidgetItem(QTreeWidgetItem):
+    def __init__(self, values: tuple[str, ...]) -> None:
+        super().__init__(list(values))
+        for index, value in enumerate(values):
+            self.setData(index, Qt.UserRole, self._build_sort_value(value))
+
+    @staticmethod
+    def _build_sort_value(value: str) -> float | str:
+        try:
+            return float(value)
+        except ValueError:
+            return value.casefold()
+
+    def __lt__(self, other: QTreeWidgetItem) -> bool:
+        if isinstance(other, QTreeWidgetItem):
+            tree_widget = self.treeWidget()
+            column = tree_widget.sortColumn() if tree_widget is not None else 0
+            left = self.data(column, Qt.UserRole)
+            right = other.data(column, Qt.UserRole)
+            if type(left) is type(right):
+                return left < right
+        return super().__lt__(other)
+
+
 class SortableTableWidgetItem(QTableWidgetItem):
     def __init__(self, value: str) -> None:
         super().__init__(value)
@@ -241,7 +419,8 @@ class SortableTableWidgetItem(QTableWidgetItem):
             right = other.sort_value
             if type(left) is type(right):
                 return left < right
-        return super().__lt__(other)
+            return str(self.text()).casefold() < str(other.text()).casefold()
+        return str(self.text()).casefold() < str(other.text()).casefold()
 
 
 class InterferenceReportDialog(QDialog):
@@ -291,7 +470,10 @@ class BlockDimensionsResultDialog(QDialog):
         apply_dialog_chrome(self)
         self.current_table_data: TableData | None = None
         self.input_path = ""
+        self.current_visible_entries: tuple[ModelTreeNodeEntry, ...] = ()
         self.current_visible_table_data: TableData | None = None
+        self.row_lookup: dict[str, dict[str, str]] = {}
+        self.display_mode = DISPLAY_MODE_TREE
 
         self.setWindowTitle("Block 尺寸统计结果")
         self.resize(1000, 640)
@@ -303,22 +485,45 @@ class BlockDimensionsResultDialog(QDialog):
         self.summary_label = QLabel("暂无结果。", self)
         self.summary_label.setWordWrap(True)
 
+        self.hint_label = QLabel(
+            "当前结果按 Icepak 官方模型树父子关系展示，block 节点保留包围盒统计，子 shape 节点保留尺寸信息。",
+            self,
+        )
+        self.hint_label.setWordWrap(True)
+
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
+        filter_row.addWidget(QLabel("显示模式", self))
+        self.display_mode_combo = ModernComboBox(self)
+        self.display_mode_combo.addItem("树显示", DISPLAY_MODE_TREE)
+        self.display_mode_combo.addItem("扁平显示", DISPLAY_MODE_FLAT)
+        self.display_mode_combo.currentIndexChanged.connect(self.apply_name_filter)
+        filter_row.addWidget(self.display_mode_combo)
         filter_row.addWidget(QLabel("名称过滤", self))
         self.name_filter_input = QLineEdit(self)
-        self.name_filter_input.setPlaceholderText("输入 object_name，动态过滤表格行")
+        self.name_filter_input.setPlaceholderText("输入对象名、对象类型或节点类型，动态过滤当前结果")
         self.name_filter_input.textChanged.connect(self.apply_name_filter)
         filter_row.addWidget(self.name_filter_input, 1)
 
+        self.result_tree = QTreeWidget(self)
+        self.result_tree.setColumnCount(len(TREE_COLUMNS))
+        self.result_tree.setHeaderLabels(list(TREE_COLUMNS))
+        self.result_tree.setAlternatingRowColors(True)
+        self.result_tree.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.result_tree.setSortingEnabled(True)
+        self.result_tree.setRootIsDecorated(True)
+        self.result_tree.setItemsExpandable(True)
+        self.result_tree.setUniformRowHeights(True)
+
         self.result_table = QTableWidget(self)
+        self.result_table.setColumnCount(len(TREE_COLUMNS))
+        self.result_table.setHorizontalHeaderLabels(list(TREE_COLUMNS))
         self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setAlternatingRowColors(True)
         self.result_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.result_table.setSortingEnabled(True)
-        self.result_table.horizontalHeader().setSectionsClickable(True)
-        self.result_table.horizontalHeader().setSortIndicatorShown(True)
+        self.result_table.hide()
 
         actions = QHBoxLayout()
         actions.addStretch(1)
@@ -335,12 +540,15 @@ class BlockDimensionsResultDialog(QDialog):
         actions.addWidget(close_button)
 
         layout.addWidget(self.summary_label)
+        layout.addWidget(self.hint_label)
         layout.addLayout(filter_row)
+        layout.addWidget(self.result_tree, 1)
         layout.addWidget(self.result_table, 1)
         layout.addLayout(actions)
 
     def set_result(self, table_data: TableData, input_path: str) -> None:
         self.current_table_data = table_data
+        self.row_lookup = build_tree_row_lookup(table_data)
         self.input_path = input_path
         self.name_filter_input.clear()
         self.apply_name_filter()
@@ -351,51 +559,71 @@ class BlockDimensionsResultDialog(QDialog):
         if self.current_table_data is None:
             return
 
+        self.display_mode = self.display_mode_combo.currentData()
         filter_text = self.name_filter_input.text().strip().casefold()
-        filtered_table_data = self.build_filtered_visible_table_data(filter_text)
-        self.current_visible_table_data = filtered_table_data
+        if self.display_mode == DISPLAY_MODE_TREE:
+            total_entries = build_model_tree_entries(self.current_table_data)
+            filtered_entries = build_model_tree_entries(self.current_table_data, filter_text)
+            self.current_visible_entries = filtered_entries
+            self.current_visible_table_data = flatten_tree_table_data(
+                filtered_entries,
+                self.row_lookup,
+                self.current_table_data.default_export_name,
+                indent_names=True,
+            )
+            self.summary_label.setText(
+                "Block 尺寸统计完成，"
+                f"当前显示 {count_tree_nodes(filtered_entries)} 个节点 / 共 {count_tree_nodes(total_entries)} 个节点，"
+                f"block {count_block_nodes(filtered_entries, self.row_lookup)} 个 / 共 {count_block_nodes(total_entries, self.row_lookup)} 个。"
+            )
+            self.populate_result_tree(filtered_entries)
+            return
 
+        flat_table = build_flat_table_data(self.current_table_data, self.row_lookup, filter_text)
+        total_flat_table = build_flat_table_data(self.current_table_data, self.row_lookup)
+        self.current_visible_entries = ()
+        self.current_visible_table_data = flat_table
         self.summary_label.setText(
             "Block 尺寸统计完成，"
-            f"当前显示 {len(filtered_table_data.rows)} 行 / 共 {len(build_visible_table_data(self.current_table_data).rows)} 行，"
-            f"{len(filtered_table_data.columns)} 列。"
+            f"当前显示 {len(flat_table.rows)} 行 / 共 {len(total_flat_table.rows)} 行，"
+            f"block {sum(1 for row in flat_table.rows if len(row) > 1 and row[1] == 'block')} 个。"
         )
-        self.populate_result_table(filtered_table_data)
+        self.populate_result_table(flat_table)
 
-    def build_filtered_visible_table_data(self, filter_text: str) -> TableData:
-        assert self.current_table_data is not None
+    def populate_result_tree(self, entries: tuple[ModelTreeNodeEntry, ...]) -> None:
+        self.result_table.hide()
+        self.result_tree.show()
+        self.result_tree.clear()
+        self.result_tree.setSortingEnabled(False)
+        self.result_tree.setRootIsDecorated(True)
 
-        visible_table_data = build_visible_table_data(self.current_table_data)
-        if not filter_text:
-            return visible_table_data
+        def create_item(node: ModelTreeNodeEntry) -> QTreeWidgetItem:
+            item = SortableTreeWidgetItem(_node_row_values(node, self.row_lookup))
+            item.setExpanded(True)
+            for child in node.children:
+                item.addChild(create_item(child))
+            return item
 
-        object_name_index = self.current_table_data.columns.index("object_name")
-        filtered_rows = tuple(
-            visible_row
-            for source_row, visible_row in zip(
-                self.current_table_data.rows,
-                visible_table_data.rows,
-            )
-            if filter_text in source_row[object_name_index].casefold()
-        )
-        return TableData(
-            columns=visible_table_data.columns,
-            rows=filtered_rows,
-            default_export_name=visible_table_data.default_export_name,
-        )
+        for entry in entries:
+            self.result_tree.addTopLevelItem(create_item(entry))
+
+        for column_index in range(len(TREE_COLUMNS)):
+            self.result_tree.resizeColumnToContents(column_index)
+        self.result_tree.setSortingEnabled(True)
 
     def populate_result_table(self, table_data: TableData) -> None:
-        self.result_table.clear()
+        self.result_tree.hide()
+        self.result_table.show()
+        self.result_table.clearContents()
         self.result_table.setSortingEnabled(False)
-        self.result_table.setColumnCount(len(table_data.columns))
-        self.result_table.setHorizontalHeaderLabels(list(table_data.columns))
         self.result_table.setRowCount(len(table_data.rows))
 
         for row_index, row in enumerate(table_data.rows):
             for column_index, value in enumerate(row):
                 self.result_table.setItem(row_index, column_index, SortableTableWidgetItem(value))
 
-        self.result_table.resizeColumnsToContents()
+        for column_index in range(len(TREE_COLUMNS)):
+            self.result_table.resizeColumnToContents(column_index)
         self.result_table.setSortingEnabled(True)
 
     def export_current_table_to_csv(self) -> None:
