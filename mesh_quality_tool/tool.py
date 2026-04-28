@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -9,13 +10,21 @@ from typing import Callable
 from icepak_runtime import build_command, resolve_icepak_bin, resolve_icepak_project
 from tool_model import ProgressUpdate, TableData, ToolExecutionResult
 
+from .rules import (
+    OBJECT_OVERRIDE_KEY_TO_PARAMETER_KEY,
+    build_mesh_rules_tcl,
+    deserialize_mesh_refinement_rules,
+)
+
 
 DEFAULT_TCL_SCRIPT = Path(__file__).resolve().with_name("generate_mesh_quality.tcl")
 TABLE_COLUMNS_PREFIX = "__QD_TABLE_COLUMNS__\t"
 TABLE_ROW_PREFIX = "__QD_TABLE_ROW__\t"
 CONTEXT_PREFIX = "__QD_CONTEXT__\t"
 PROGRESS_PREFIX = "__QD_PROGRESS__\t"
+RULE_PREFIX = "__QD_RULE__\t"
 USER_PARAMETER_ENV_PREFIX = "QUARD_ICEPAK_"
+MESH_RULES_ENV_KEY = "QUARD_ICEPAK_MESH_RULES_FILE"
 
 USER_PARAMETER_KEYS = (
     "grid_size_x",
@@ -42,6 +51,17 @@ class MeshContextEntry:
     label: str
     value: str
     unit: str
+
+
+@dataclass(frozen=True)
+class MeshRuleSummary:
+    name: str
+    priority: int
+    match_mode: str
+    patterns: tuple[str, ...]
+    matched_count: int
+    matched_blocks: tuple[str, ...]
+    override_keys: tuple[str, ...]
 
 
 def resolve_tcl_script(explicit: str | None) -> Path:
@@ -101,10 +121,72 @@ def _metric_lookup(table_data: TableData | None) -> dict[str, dict[str, str]]:
     return metrics
 
 
+def _split_encoded_list(value: str) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(item for item in value.split("|") if item)
+
+
+def _override_label(override_key: str) -> str:
+    parameter_key = OBJECT_OVERRIDE_KEY_TO_PARAMETER_KEY.get(override_key, override_key)
+    return {
+        "grid_size_x": "局部尺寸 X",
+        "grid_size_y": "局部尺寸 Y",
+        "grid_size_z": "局部尺寸 Z",
+        "grid_sep_x": "局部分离间隙 X",
+        "grid_sep_y": "局部分离间隙 Y",
+        "grid_sep_z": "局部分离间隙 Z",
+        "grid_enable_prism_layer": "局部棱柱层",
+        "grid_tetra_smqual": "局部平滑质量阈值",
+        "grid_tetra_smiters": "局部平滑迭代次数",
+        "grid_hdm_refine_features": "局部特征细化",
+        "grid_include_all_gaps": "局部全部窄缝包含",
+    }.get(parameter_key, parameter_key)
+
+
+def _parse_rule_summary(parts: list[str]) -> MeshRuleSummary | None:
+    if len(parts) < 7:
+        return None
+
+    try:
+        priority = int(parts[1])
+        matched_count = int(parts[4])
+    except ValueError:
+        return None
+
+    return MeshRuleSummary(
+        name=parts[0],
+        priority=priority,
+        match_mode=parts[2],
+        patterns=_split_encoded_list(parts[3]),
+        matched_count=matched_count,
+        matched_blocks=_split_encoded_list(parts[5]),
+        override_keys=_split_encoded_list(parts[6]),
+    )
+
+
+def _write_mesh_rules_file(serialized_rules: str) -> Path | None:
+    rules = deserialize_mesh_refinement_rules(serialized_rules)
+    if not rules:
+        return None
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".tcl",
+        prefix="quard_mesh_rules_",
+        delete=False,
+        encoding="utf-8",
+        newline="\n",
+    ) as handle:
+        handle.write(build_mesh_rules_tcl(rules))
+        return Path(handle.name)
+
+
 def build_mesh_guidance_report(
     table_data: TableData | None,
     context_entries: list[MeshContextEntry],
     warnings: list[str],
+    rule_summaries: list[MeshRuleSummary],
 ) -> str:
     context = _context_lookup(context_entries)
     metrics = _metric_lookup(table_data)
@@ -182,6 +264,27 @@ def build_mesh_guidance_report(
         if include_all_gaps is not None:
             refinement_summary.append(f"包含全部窄缝 {'开启' if include_all_gaps.value == '1' else '关闭'}")
         lines.append("- " + "，".join(refinement_summary))
+
+    if rule_summaries:
+        lines.append("- 已启用块组细化规则 {} 条".format(len(rule_summaries)))
+
+    if rule_summaries:
+        lines.append("")
+        lines.append("块组细化规则：")
+        for rule in sorted(rule_summaries, key=lambda item: (item.priority, item.name)):
+            override_summary = "，".join(_override_label(key) for key in rule.override_keys) or "无覆盖项"
+            if rule.matched_count <= 0:
+                lines.append(
+                    f"- {rule.name}（优先级 {rule.priority}，{rule.match_mode}）未命中任何 block；覆盖项：{override_summary}。"
+                )
+                continue
+
+            preview_names = "，".join(rule.matched_blocks[:4])
+            if rule.matched_count > 4:
+                preview_names = f"{preview_names} 等"
+            lines.append(
+                f"- {rule.name}（优先级 {rule.priority}，{rule.match_mode}）命中 {rule.matched_count} 个 block：{preview_names}；覆盖项：{override_summary}。"
+            )
 
     lines.append("")
     lines.append("质量判断：")
@@ -302,6 +405,13 @@ def build_mesh_guidance_report(
             "- 当前未开启全部窄缝包含；若低质量区域与窄缝、缝隙导流有关，建议针对该类区域重新评估 gap 捕捉策略。"
         )
 
+    for rule in rule_summaries:
+        if rule.matched_count == 0:
+            lines.append(f"- 规则 {rule.name} 未命中任何 block。")
+            advice_lines.append(
+                f"- 规则 {rule.name} 没有命中对象，建议检查匹配模式与块名模式是否一致，避免局部细化配置实际未生效。"
+            )
+
     if warnings:
         lines.append("")
         lines.append("网格日志告警：")
@@ -341,6 +451,11 @@ def generate_mesh_quality_report(
     logger = log or print
     process_env = os.environ.copy()
     process_env.update(build_mesh_override_env(mesh_parameters))
+    mesh_rules_file: Path | None = None
+    if mesh_parameters:
+        mesh_rules_file = _write_mesh_rules_file(mesh_parameters.get("mesh_refinement_rules", ""))
+    if mesh_rules_file is not None:
+        process_env[MESH_RULES_ENV_KEY] = str(mesh_rules_file)
 
     project_dir = resolve_icepak_project(Path(input_path))
     resolved_icepak_bin = resolve_icepak_bin(icepak_bin, env_script)
@@ -363,62 +478,76 @@ def generate_mesh_quality_report(
     rows: list[tuple[str, ...]] = []
     context_entries: list[MeshContextEntry] = []
     warnings: list[str] = []
+    rule_summaries: list[MeshRuleSummary] = []
 
-    process = subprocess.Popen(
-        command,
-        env=process_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        errors="replace",
-        bufsize=1,
-    )
+    try:
+        process = subprocess.Popen(
+            command,
+            env=process_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            bufsize=1,
+        )
 
-    assert process.stdout is not None
-    for line in process.stdout:
-        stripped = line.rstrip()
-        if stripped.startswith(PROGRESS_PREFIX):
-            parts = stripped[len(PROGRESS_PREFIX) :].split("\t")
-            if len(parts) >= 4 and progress is not None:
-                mode, value, maximum, message = parts[:4]
-                if mode == "determinate":
-                    progress(
-                        ProgressUpdate(
-                            mode="determinate",
-                            value=int(value),
-                            maximum=int(maximum),
-                            message=message,
+        assert process.stdout is not None
+        for line in process.stdout:
+            stripped = line.rstrip()
+            if stripped.startswith(PROGRESS_PREFIX):
+                parts = stripped[len(PROGRESS_PREFIX) :].split("\t")
+                if len(parts) >= 4 and progress is not None:
+                    mode, value, maximum, message = parts[:4]
+                    if mode == "determinate":
+                        progress(
+                            ProgressUpdate(
+                                mode="determinate",
+                                value=int(value),
+                                maximum=int(maximum),
+                                message=message,
+                            )
+                        )
+                    elif mode == "indeterminate":
+                        progress(ProgressUpdate(mode="indeterminate", message=message))
+                continue
+            if stripped.startswith(TABLE_COLUMNS_PREFIX):
+                columns = stripped[len(TABLE_COLUMNS_PREFIX) :].split("\t")
+                continue
+            if stripped.startswith(TABLE_ROW_PREFIX):
+                rows.append(tuple(stripped[len(TABLE_ROW_PREFIX) :].split("\t")))
+                continue
+            if stripped.startswith(CONTEXT_PREFIX):
+                parts = stripped[len(CONTEXT_PREFIX) :].split("\t")
+                if len(parts) >= 5:
+                    context_entries.append(
+                        MeshContextEntry(
+                            category=parts[0],
+                            key=parts[1],
+                            label=parts[2],
+                            value=parts[3],
+                            unit=parts[4],
                         )
                     )
-                elif mode == "indeterminate":
-                    progress(ProgressUpdate(mode="indeterminate", message=message))
-            continue
-        if stripped.startswith(TABLE_COLUMNS_PREFIX):
-            columns = stripped[len(TABLE_COLUMNS_PREFIX) :].split("\t")
-            continue
-        if stripped.startswith(TABLE_ROW_PREFIX):
-            rows.append(tuple(stripped[len(TABLE_ROW_PREFIX) :].split("\t")))
-            continue
-        if stripped.startswith(CONTEXT_PREFIX):
-            parts = stripped[len(CONTEXT_PREFIX) :].split("\t")
-            if len(parts) >= 5:
-                context_entries.append(
-                    MeshContextEntry(
-                        category=parts[0],
-                        key=parts[1],
-                        label=parts[2],
-                        value=parts[3],
-                        unit=parts[4],
-                    )
-                )
-            continue
+                continue
+            if stripped.startswith(RULE_PREFIX):
+                summary = _parse_rule_summary(stripped[len(RULE_PREFIX) :].split("\t"))
+                if summary is not None:
+                    rule_summaries.append(summary)
+                continue
 
-        lowered = stripped.casefold()
-        if "warning:" in lowered or "intersects assembly" in lowered or "minimum separation" in lowered:
-            warnings.append(stripped)
-        logger(stripped)
+            lowered = stripped.casefold()
+            if "warning:" in lowered or "intersects assembly" in lowered or "minimum separation" in lowered:
+                warnings.append(stripped)
+            logger(stripped)
 
-    exit_code = process.wait()
+        exit_code = process.wait()
+    finally:
+        if mesh_rules_file is not None:
+            try:
+                mesh_rules_file.unlink()
+            except OSError:
+                pass
+
     table_data = None
     if columns:
         table_data = TableData(
@@ -426,7 +555,7 @@ def generate_mesh_quality_report(
             rows=tuple(rows),
             default_export_name="mesh_quality_metrics.csv",
         )
-    report_text = build_mesh_guidance_report(table_data, context_entries, warnings)
+    report_text = build_mesh_guidance_report(table_data, context_entries, warnings, rule_summaries)
     if progress is not None:
         progress(ProgressUpdate(mode="determinate", value=99, maximum=100, message="网格质量评估完成，正在整理结果..."))
     return ToolExecutionResult(exit_code=exit_code, table_data=table_data, report_text=report_text)

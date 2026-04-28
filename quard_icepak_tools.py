@@ -209,12 +209,28 @@ class ParameterEditor(QWidget):
         self._spin_box: QSpinBox | None = None
         self._double_spin_box: QDoubleSpinBox | None = None
         self._toggle_box: QCheckBox | None = None
+        self._custom_value = ""
+        self._custom_display_line_edit: QLineEdit | None = None
+        self._custom_button: QPushButton | None = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        if parameter.value_type == "boolean":
+        if parameter.editor_kind == "mesh_refinement_rules":
+            display_line_edit = QLineEdit(self)
+            display_line_edit.setReadOnly(True)
+            display_line_edit.setClearButtonEnabled(False)
+            layout.addWidget(display_line_edit, 1)
+
+            edit_button = QPushButton("编辑规则", self)
+            edit_button.setObjectName("secondaryButton")
+            edit_button.clicked.connect(self._open_custom_editor)
+            layout.addWidget(edit_button)
+
+            self._custom_display_line_edit = display_line_edit
+            self._custom_button = edit_button
+        elif parameter.value_type == "boolean":
             combo_box = ModernComboBox(self)
             if not parameter.required:
                 combo_box.addItem("未设置（沿用当前值）", "")
@@ -279,10 +295,16 @@ class ParameterEditor(QWidget):
         return toggle_box
 
     def setPlaceholderText(self, text: str) -> None:
+        if self._custom_display_line_edit is not None:
+            self._custom_display_line_edit.setPlaceholderText(text)
+            return
         if self._line_edit is not None:
             self._line_edit.setPlaceholderText(text)
 
     def text(self) -> str:
+        if self._custom_display_line_edit is not None:
+            return self._custom_value
+
         if self._line_edit is not None:
             return self._line_edit.text().strip()
 
@@ -305,6 +327,19 @@ class ParameterEditor(QWidget):
 
     def setText(self, value: str) -> None:
         normalized = value.strip()
+
+        if self._custom_display_line_edit is not None:
+            self._custom_value = normalized
+            summary = normalized
+            try:
+                from mesh_quality_tool.rules import summarize_mesh_refinement_rules
+
+                summary = summarize_mesh_refinement_rules(normalized)
+            except Exception:
+                if not normalized:
+                    summary = ""
+            self._custom_display_line_edit.setText(summary)
+            return
 
         if self._line_edit is not None:
             self._line_edit.setText(normalized)
@@ -335,10 +370,31 @@ class ParameterEditor(QWidget):
 
     def setEnabled(self, enabled: bool) -> None:
         super().setEnabled(enabled)
+        if self._custom_display_line_edit is not None:
+            self._custom_display_line_edit.setEnabled(enabled)
+        if self._custom_button is not None:
+            self._custom_button.setEnabled(enabled)
         if self._spin_box is not None and self._toggle_box is not None:
             self._spin_box.setEnabled(enabled and self._toggle_box.isChecked())
         if self._double_spin_box is not None and self._toggle_box is not None:
             self._double_spin_box.setEnabled(enabled and self._toggle_box.isChecked())
+
+    def _open_custom_editor(self) -> None:
+        if self.parameter.editor_kind != "mesh_refinement_rules":
+            return
+
+        try:
+            from mesh_quality_tool.rules_editor import edit_mesh_refinement_rules
+        except Exception as exc:
+            QMessageBox.warning(self, "无法打开规则编辑器", str(exc))
+            return
+
+        updated_value = edit_mesh_refinement_rules(self._custom_value, self.window())
+        if updated_value is None:
+            return
+
+        self.setText(updated_value)
+        self.valueChanged.emit(self.text())
 
 
 class ToolWorker(QObject):

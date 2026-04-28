@@ -4,6 +4,7 @@ from .result_dialog import show_mesh_quality_result
 from .tool import DEFAULT_TCL_SCRIPT, generate_mesh_quality_report
 from .tool_version import TOOL_VERSION
 
+
 def execute_mesh_quality(parameters: dict[str, str], log=None, progress=None):
     return generate_mesh_quality_report(
         input_path=parameters["input_path"],
@@ -26,6 +27,14 @@ TOOL_SPEC = ToolSpec(
     ),
     run_button_text="生成网格并评估",
     parameters=(
+        ParameterSpec(
+            key="mesh_refinement_rules",
+            label="块组细化规则",
+            browse_mode="none",
+            editor_kind="mesh_refinement_rules",
+            required=False,
+            example_hint="点击“编辑规则”，按块名规则配置局部尺寸、gap 和特征细化覆盖。",
+        ),
         ParameterSpec(
             key="grid_size_x",
             label="全局尺寸 X",

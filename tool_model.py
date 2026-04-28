@@ -44,6 +44,7 @@ class ParameterSpec:
     label: str
     browse_mode: str
     value_type: str = "text"
+    editor_kind: str = "default"
     required: bool = False
     file_filter: str = "All Files (*)"
     default_value: str = ""

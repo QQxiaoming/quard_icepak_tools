@@ -49,6 +49,160 @@ proc _apply_mesh_overrides {} {
     _apply_env_override "QUARD_ICEPAK_GRID_INCLUDE_ALL_GAPS" grid_include_all_gaps "包含全部窄缝"
 }
 
+proc _load_mesh_refinement_rules {} {
+    global env quard_mesh_refinement_rules
+
+    set quard_mesh_refinement_rules [list]
+    if {![info exists env(QUARD_ICEPAK_MESH_RULES_FILE)]} {
+        return
+    }
+
+    set rules_file [string trim $env(QUARD_ICEPAK_MESH_RULES_FILE)]
+    if {$rules_file eq ""} {
+        return
+    }
+    if {![file exists $rules_file]} {
+        error [format "mesh refinement rules file not found: %s" $rules_file]
+    }
+
+    source $rules_file
+}
+
+proc _rule_matches_name {match_mode patterns object_name} {
+    foreach pattern $patterns {
+        if {$match_mode eq "exact"} {
+            if {$object_name eq $pattern} {
+                return 1
+            }
+            continue
+        }
+        if {$match_mode eq "regex"} {
+            if {[regexp -- $pattern $object_name]} {
+                return 1
+            }
+            continue
+        }
+        if {[string match $pattern $object_name]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+proc _rule_override_pairs {overrides} {
+    set args [list perobject 1]
+
+    if {[dict exists $overrides grid_size_x]} {
+        lappend args usesize_x 1 size_x [dict get $overrides grid_size_x]
+    }
+    if {[dict exists $overrides grid_size_y]} {
+        lappend args usesize_y 1 size_y [dict get $overrides grid_size_y]
+    }
+    if {[dict exists $overrides grid_size_z]} {
+        lappend args usesize_z 1 size_z [dict get $overrides grid_size_z]
+    }
+    if {[dict exists $overrides grid_sep_x]} {
+        lappend args sep_x [dict get $overrides grid_sep_x]
+    }
+    if {[dict exists $overrides grid_sep_y]} {
+        lappend args sep_y [dict get $overrides grid_sep_y]
+    }
+    if {[dict exists $overrides grid_sep_z]} {
+        lappend args sep_z [dict get $overrides grid_sep_z]
+    }
+    if {[dict exists $overrides grid_enable_prism_layer]} {
+        lappend args enable_prism_layer [dict get $overrides grid_enable_prism_layer]
+    }
+    if {[dict exists $overrides grid_tetra_smqual]} {
+        lappend args tetra_smqual [dict get $overrides grid_tetra_smqual]
+    }
+    if {[dict exists $overrides grid_tetra_smiters]} {
+        lappend args tetra_smiters [dict get $overrides grid_tetra_smiters]
+    }
+    if {[dict exists $overrides grid_hdm_refine_features]} {
+        lappend args hdm_refine_features [dict get $overrides grid_hdm_refine_features]
+    }
+    if {[dict exists $overrides grid_include_all_gaps]} {
+        lappend args include_all_gaps [dict get $overrides grid_include_all_gaps]
+    }
+
+    return $args
+}
+
+proc _emit_rule_summary {name priority match_mode patterns matched_names overrides} {
+    set sorted_override_keys [lsort [dict keys $overrides]]
+    puts [join [list \
+        "__QD_RULE__" \
+        $name \
+        $priority \
+        $match_mode \
+        [join $patterns "|"] \
+        [llength $matched_names] \
+        [join $matched_names "|"] \
+        [join $sorted_override_keys "|"]] "\t"]
+}
+
+proc _apply_mesh_refinement_rules {} {
+    global quard_mesh_refinement_rules grid_perobject
+
+    if {![info exists quard_mesh_refinement_rules] || [llength $quard_mesh_refinement_rules] == 0} {
+        return
+    }
+
+    set block_objects [list]
+    foreach obj [db_list_objects_recursive] {
+        if {[catch {set obtype [$obj getval obtype]}]} {
+            continue
+        }
+        if {$obtype eq "block"} {
+            lappend block_objects $obj
+        }
+    }
+
+    set applied_rule_count 0
+    foreach rule $quard_mesh_refinement_rules {
+        set enabled [dict get $rule enabled]
+        if {!$enabled} {
+            continue
+        }
+
+        set name [dict get $rule name]
+        set priority [dict get $rule priority]
+        set match_mode [dict get $rule match_mode]
+        set patterns [dict get $rule patterns]
+        set overrides [dict get $rule overrides]
+        set matched_names [list]
+        set matched_objects [list]
+
+        foreach obj $block_objects {
+            set obj_name [$obj getval name]
+            if {[_rule_matches_name $match_mode $patterns $obj_name]} {
+                lappend matched_names $obj_name
+                lappend matched_objects $obj
+            }
+        }
+
+        _emit_rule_summary $name $priority $match_mode $patterns $matched_names $overrides
+        if {[llength $matched_objects] == 0} {
+            continue
+        }
+
+        set args [_rule_override_pairs $overrides]
+        foreach obj $matched_objects {
+            if {[catch {eval [linsert $args 0 $obj setval]} err]} {
+                error [format "failed to apply refinement rule %s to %s: %s" $name [$obj getval name] $err]
+            }
+        }
+
+        incr applied_rule_count
+    }
+
+    if {$applied_rule_count > 0} {
+        set grid_perobject 1
+        puts [format "已应用 %d 条块组细化规则" $applied_rule_count]
+    }
+}
+
 proc _metric_spec {metric_key} {
     switch -- $metric_key {
         det_aspect {
@@ -122,6 +276,8 @@ puts "=== Icepak mesh generation and quality evaluation ==="
 puts "开始生成网格，请等待 ..."
 
 _apply_mesh_overrides
+_load_mesh_refinement_rules
+_apply_mesh_refinement_rules
 _emit_model_and_mesh_context
 _emit_progress determinate 5 100 "已读取模型与网格参数"
 _emit_progress indeterminate 0 0 "正在生成网格..."

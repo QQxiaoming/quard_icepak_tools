@@ -5,3 +5,6 @@ source ~/miniconda3/bin/activate
 conda activate pyside
 
 我们的项目通过github actions进行持续集成测试，主要是为window平台用户打包成exe分发，任何修改要保证不会让打包失效。
+
+如需访问icepak工具请先配置环境：
+source /home/qqm/ansys-v221-env.sh
