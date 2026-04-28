@@ -31,65 +31,112 @@ MODEL_TREE_COLUMNS = (
 
 
 @dataclass(frozen=True)
-class ModelTreeObjectEntry:
+class ModelTreeNodeEntry:
+    node_id: str
+    parent_id: str
+    node_kind: str
     object_name: str
     object_type: str
+    detail: str = ""
+    children: tuple["ModelTreeNodeEntry", ...] = ()
 
 
-@dataclass(frozen=True)
-class ModelTreeGroupEntry:
-    object_type: str
-    objects: tuple[ModelTreeObjectEntry, ...]
+def _prune_tree(nodes: tuple[ModelTreeNodeEntry, ...], filter_text: str) -> tuple[ModelTreeNodeEntry, ...]:
+    if not filter_text:
+        return nodes
 
-    def count_label(self) -> str:
-        return f"{len(self.objects)} 个对象"
+    pruned_nodes: list[ModelTreeNodeEntry] = []
+    for node in nodes:
+        pruned_children = _prune_tree(node.children, filter_text)
+        searchable = f"{node.node_kind} {node.object_type} {node.object_name} {node.detail}".casefold()
+        if filter_text in searchable or pruned_children:
+            pruned_nodes.append(
+                ModelTreeNodeEntry(
+                    node_id=node.node_id,
+                    parent_id=node.parent_id,
+                    node_kind=node.node_kind,
+                    object_name=node.object_name,
+                    object_type=node.object_type,
+                    detail=node.detail,
+                    children=pruned_children,
+                )
+            )
+    return tuple(pruned_nodes)
 
 
-def build_model_tree_groups(
+def build_model_tree_entries(
     table_data: TableData,
     filter_text: str = "",
-) -> tuple[ModelTreeGroupEntry, ...]:
+) -> tuple[ModelTreeNodeEntry, ...]:
     index_map = {column: index for index, column in enumerate(table_data.columns)}
-    required = ("object_type", "object_name")
+    required = ("node_id", "parent_id", "node_kind", "object_type", "object_name", "detail")
     missing = [column for column in required if column not in index_map]
     if missing:
         return ()
 
-    normalized_filter = filter_text.casefold()
-    grouped: dict[str, list[ModelTreeObjectEntry]] = {}
-    order: list[str] = []
-
+    ordered_nodes: list[ModelTreeNodeEntry] = []
+    seen_node_ids: set[str] = set()
     for row in table_data.rows:
+        node_id = row[index_map["node_id"]].strip()
+        parent_id = row[index_map["parent_id"]].strip() or "__root__"
+        node_kind = row[index_map["node_kind"]].strip() or "object"
         object_type = row[index_map["object_type"]].strip() or "unknown"
         object_name = row[index_map["object_name"]].strip()
-        if not object_name:
+        detail = row[index_map["detail"]].strip()
+        if not node_id or not object_name or node_id in seen_node_ids:
             continue
 
-        if normalized_filter:
-            searchable = f"{object_type} {object_name}".casefold()
-            if normalized_filter not in searchable:
-                continue
-
-        if object_type not in grouped:
-            grouped[object_type] = []
-            order.append(object_type)
-
-        grouped[object_type].append(
-            ModelTreeObjectEntry(object_name=object_name, object_type=object_type)
+        seen_node_ids.add(node_id)
+        ordered_nodes.append(
+            ModelTreeNodeEntry(
+                node_id=node_id,
+                parent_id=parent_id,
+                node_kind=node_kind,
+                object_name=object_name,
+                object_type=object_type,
+                detail=detail,
+            )
         )
 
-    return tuple(
-        ModelTreeGroupEntry(object_type=object_type, objects=tuple(grouped[object_type]))
-        for object_type in order
-    )
+    children_by_parent: dict[str, list[ModelTreeNodeEntry]] = {}
+    for node in ordered_nodes:
+        children_by_parent.setdefault(node.parent_id, []).append(node)
+
+    node_by_id = {node.node_id: node for node in ordered_nodes}
+
+    def build_node(node: ModelTreeNodeEntry) -> ModelTreeNodeEntry:
+        child_nodes = tuple(build_node(child) for child in children_by_parent.get(node.node_id, []))
+        detail = node.detail
+        if node.node_kind in {"object", "shape"} and child_nodes:
+            detail = detail or f"{len(child_nodes)} 个子节点"
+        return ModelTreeNodeEntry(
+            node_id=node.node_id,
+            parent_id=node.parent_id,
+            node_kind=node.node_kind,
+            object_name=node.object_name,
+            object_type=node.object_type,
+            detail=detail,
+            children=child_nodes,
+        )
+
+    root_nodes: list[ModelTreeNodeEntry] = []
+    for node in ordered_nodes:
+        if node.parent_id == "__root__" or node.parent_id not in node_by_id:
+            root_nodes.append(build_node(node))
+
+    return _prune_tree(tuple(root_nodes), filter_text.casefold())
 
 
-def flatten_model_tree_groups(groups: tuple[ModelTreeGroupEntry, ...]) -> TableData:
+def flatten_model_tree_entries(entries: tuple[ModelTreeNodeEntry, ...]) -> TableData:
     rows: list[tuple[str, ...]] = []
-    for group in groups:
-        rows.append((group.object_type, "分组", group.count_label()))
-        for entry in group.objects:
-            rows.append((entry.object_name, entry.object_type, ""))
+
+    def append_rows(nodes: tuple[ModelTreeNodeEntry, ...], depth: int) -> None:
+        indent = "  " * depth
+        for node in nodes:
+            rows.append((f"{indent}{node.object_name}", node.object_type, node.detail))
+            append_rows(node.children, depth + 1)
+
+    append_rows(entries, 0)
     return TableData(
         columns=MODEL_TREE_COLUMNS,
         rows=tuple(rows),
@@ -113,7 +160,7 @@ class IcepakModelTreeResultDialog(QDialog):
         super().__init__(parent)
         apply_dialog_chrome(self)
         self.current_table_data: TableData | None = None
-        self.current_visible_groups: tuple[ModelTreeGroupEntry, ...] = ()
+        self.current_visible_entries: tuple[ModelTreeNodeEntry, ...] = ()
         self.input_path = ""
 
         self.setWindowTitle("Icepak 模型树预览")
@@ -124,7 +171,7 @@ class IcepakModelTreeResultDialog(QDialog):
         layout.setSpacing(12)
 
         self.hint_label = QLabel(
-            "该工具基于 Icepak Tcl 当前可用的平铺对象枚举，按对象类型分组展示，便于快速核对模型内容。",
+            "该工具按 Icepak 官方树的父子关系导出：节点层级来自对象的 model_container，而不是名称推断。",
             self,
         )
         self.hint_label.setWordWrap(True)
@@ -136,7 +183,7 @@ class IcepakModelTreeResultDialog(QDialog):
         filter_row.setSpacing(8)
         filter_row.addWidget(QLabel("对象过滤", self))
         self.name_filter_input = QLineEdit(self)
-        self.name_filter_input.setPlaceholderText("输入对象名或对象类型，动态过滤预览树")
+        self.name_filter_input.setPlaceholderText("输入对象名、对象类型或节点类型，动态过滤预览树")
         self.name_filter_input.textChanged.connect(self.apply_name_filter)
         filter_row.addWidget(self.name_filter_input, 1)
 
@@ -178,36 +225,41 @@ class IcepakModelTreeResultDialog(QDialog):
             return
 
         filter_text = self.name_filter_input.text().strip().casefold()
-        filtered_groups = build_model_tree_groups(self.current_table_data, filter_text)
-        total_groups = build_model_tree_groups(self.current_table_data)
-        visible_object_count = sum(len(group.objects) for group in filtered_groups)
-        total_object_count = sum(len(group.objects) for group in total_groups)
-        self.current_visible_groups = filtered_groups
+        filtered_entries = build_model_tree_entries(self.current_table_data, filter_text)
+        total_entries = build_model_tree_entries(self.current_table_data)
+
+        def count_nodes(nodes: tuple[ModelTreeNodeEntry, ...]) -> int:
+            total = 0
+            for node in nodes:
+                if node.node_kind in {"object", "shape"}:
+                    total += 1
+                total += count_nodes(node.children)
+            return total
+
+        self.current_visible_entries = filtered_entries
         self.summary_label.setText(
             "Icepak 模型树预览已加载，"
-            f"当前显示 {len(filtered_groups)} 个类型分组 / 共 {len(total_groups)} 个类型分组，"
-            f"{visible_object_count} 个对象 / 共 {total_object_count} 个对象。"
+            f"当前显示 {count_nodes(filtered_entries)} 个节点 / 共 {count_nodes(total_entries)} 个节点，"
+            f"顶层节点 {len(filtered_entries)} 个 / 共 {len(total_entries)} 个。"
         )
-        self.populate_result_tree(filtered_groups)
+        self.populate_result_tree(filtered_entries)
 
-    def populate_result_tree(self, groups: tuple[ModelTreeGroupEntry, ...]) -> None:
+    def populate_result_tree(self, entries: tuple[ModelTreeNodeEntry, ...]) -> None:
         self.result_tree.clear()
         self.result_tree.setSortingEnabled(False)
 
-        for group in groups:
-            group_item = SortableTreeWidgetItem(group.object_type)
-            group_item.setText(0, group.object_type)
-            group_item.setText(1, "分组")
-            group_item.setText(2, group.count_label())
-            group_item.setExpanded(True)
-            self.result_tree.addTopLevelItem(group_item)
+        def create_item(node: ModelTreeNodeEntry) -> QTreeWidgetItem:
+            item = SortableTreeWidgetItem(node.object_name)
+            item.setText(0, node.object_name)
+            item.setText(1, node.object_type)
+            item.setText(2, node.detail)
+            item.setExpanded(True)
+            for child in node.children:
+                item.addChild(create_item(child))
+            return item
 
-            for entry in group.objects:
-                object_item = SortableTreeWidgetItem(entry.object_name)
-                object_item.setText(0, entry.object_name)
-                object_item.setText(1, entry.object_type)
-                object_item.setText(2, "")
-                group_item.addChild(object_item)
+        for entry in entries:
+            self.result_tree.addTopLevelItem(create_item(entry))
 
         self.result_tree.resizeColumnToContents(0)
         self.result_tree.resizeColumnToContents(1)
@@ -215,10 +267,10 @@ class IcepakModelTreeResultDialog(QDialog):
         self.result_tree.setSortingEnabled(True)
 
     def export_current_table_to_csv(self) -> None:
-        if not self.current_visible_groups:
+        if not self.current_visible_entries:
             return
 
-        visible_table_data = flatten_model_tree_groups(self.current_visible_groups)
+        visible_table_data = flatten_model_tree_entries(self.current_visible_entries)
         default_name = visible_table_data.default_export_name
         start_path = str(Path.cwd() / default_name)
         if self.input_path:

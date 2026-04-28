@@ -58,7 +58,7 @@ def export_model_tree_preview(
 
     assert process.stdout is not None
     for line in process.stdout:
-        stripped = line.rstrip()
+        stripped = line.rstrip("\r\n")
         if stripped.startswith(PROGRESS_PREFIX):
             parts = stripped[len(PROGRESS_PREFIX) :].split("\t")
             if len(parts) >= 4 and progress is not None:
