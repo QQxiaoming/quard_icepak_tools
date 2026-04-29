@@ -87,7 +87,7 @@ jobs:
           fi
 
       - name: Download windows artifact
-        uses: dawidd6/action-download-artifact@v20
+        uses: dawidd6/action-download-artifact@v21
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ steps.wait_for_tag_build.outputs.build_run_id }}
